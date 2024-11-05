@@ -19,13 +19,29 @@ export const tags = async (req, res) => {
 
 export const getTag = async (req, res) => {
   let db;
-  const query = "SELECT * FROM tcn_tags WHERE id=?";
   const id = parseInt(req.params.id);
+  const reqQuery = req.query;
+
+  console.log(reqQuery);
+
+  let query = "SELECT * FROM tcn_tags WHERE id=?";
+
   try {
+    if (reqQuery?.get) {
+      switch (reqQuery.get) {
+        case "bin":
+          query = `SELECT DISTINCT tcn_bins.* FROM tcn_bins JOIN tcn_tags ON tcn_tags.binid = tcn_bins.id WHERE tcn_tags.id=${id}`;
+          break;
+        default:
+          break;
+      }
+    }
+
     db = await dbPools.pool.getConnection();
-    const tag = await db.query(query, [id]);
-    return res.json(tag?.[0] || {});
+    const data = await db.query(query);
+    return res.json(data?.[0] || {});
   } catch (error) {
+    console.log(error);
     return res.status(404).end("Server error");
   } finally {
     if (db) {
@@ -68,8 +84,9 @@ export const putTag = async (req, res) => {
   let db;
 
   const body = req.body;
+  const id = req.params?.id;
   console.log(body);
-  const updateValues = fitUpdateValues(body, ["id", "user_id"]);
+  const updateValues = fitUpdateValues(body, ["id", "userid"]);
 
   console.log(updateValues);
 
@@ -77,7 +94,7 @@ export const putTag = async (req, res) => {
 
   try {
     db = await dbPools.pool.getConnection();
-    await db.query(query, [body.id]);
+    await db.query(query, [id]);
     return res.status(200).end();
   } catch (error) {
     console.log(error);
