@@ -10,15 +10,15 @@ const app = express();
 
 // Define your CORS options (customize to your needs)
 const corsOptions = {
-  origin: '*', 
-  methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
+  origin: "*",
+  methods: "GET,HEAD,PUT,PATCH,POST,DELETE",
 };
 
 app.use(cors(corsOptions));
 
 app.use(express.json());
 
-app.use("/v2/api", apiRouter);
+app.use("/node/api", apiRouter);
 
 app.use(sqlinjection); // add sql-injection middleware here
 

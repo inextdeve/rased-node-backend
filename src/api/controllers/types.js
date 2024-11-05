@@ -4,13 +4,13 @@ import { flatArray } from "../helpers/utils.js";
 
 export const types = async (_, res) => {
   let db;
-  const query = "SELECT * FROM tcn_bin_type";
+  const query = "SELECT * FROM tcn_binstypes";
   try {
     db = await dbPools.pool.getConnection();
     const dbQuery = await db.query(query);
-    res.json(dbQuery);
+    return res.json(dbQuery);
   } catch (error) {
-    res.status(400).end();
+    return res.status(400).end();
   } finally {
     if (db) {
       await db.release();

@@ -1,99 +1,19 @@
 import moment from "moment";
 import dbPools from "../db/config/index.js";
 import { LAST7DAYS, LASTWEEK } from "../helpers/constants.js";
+import { fitUpdateValues } from "../helpers/utils.js";
 
 const bins = async (req, res) => {
   let db;
 
-  const query = req.query;
-
-  const routeCondition = req.query.routeid
-    ? `tc_geofences.routid=${req.query.routeid}`
-    : "";
-  const centerCondition = req.query.centerid
-    ? `tcn_centers.id=${req.query.centerid}`
-    : "";
-  const binTypeCondition = req.query.bintypeid
-    ? `tcn_bin_type.id=${req.query.bintypeid}`
-    : "";
-  const binStatusCondition = req.query.status || "all";
-
-  //Query for empted bins only
-  const dbQuery = `SELECT geoid, bydevice FROM tcn_poi_schedule WHERE serv_time BETWEEN "${
-    query.from
-  }" AND ${query.to ? `"${query.to}"` : false || "(SELECT current_timestamp)"}`;
-
-  //Query for all bins
-  const queryAllBins = `SELECT tc_geofences.id AS id_bin, tc_geofences.description, tc_geofences.area AS position, tc_geofences.routid, tc_geofences.centerid,tc_geofences.bintypeid , tcn_centers.center_name, tcn_routs.rout_code AS route, tcn_bin_type.bintype
-                        FROM tc_geofences
-                        JOIN tcn_centers ON tc_geofences.centerid=tcn_centers.id
-                        JOIN tcn_routs ON tc_geofences.routid=tcn_routs.id
-                        JOIN tcn_bin_type ON tc_geofences.bintypeid=tcn_bin_type.id 
-                        WHERE attributes LIKE '%"bins": "yes"%'
-                        AND JSON_EXTRACT(attributes, "$.cartoon") IS NULL
-                        ${routeCondition ? `AND ${routeCondition}` : ""} ${
-    centerCondition ? `AND ${centerCondition}` : ""
-  } ${binTypeCondition ? `AND ${binTypeCondition}` : ""}`;
-
-  const queryLastOperations = `SELECT tt.geoid AS id, tt.serv_time FROM tcn_poi_schedule tt
-  INNER JOIN (SELECT geoid, MAX(serv_time) AS MaxDateTime FROM tcn_poi_schedule GROUP BY geoid)
-  groupedtt ON tt.geoid=groupedtt.geoid
-  AND tt.serv_time = groupedtt.MaxDateTime`;
+  const query = "SELECT * FROM tcn_bins";
 
   try {
     db = await dbPools.pool.getConnection();
-    const allBins = await db.query(queryAllBins);
-
-    const data = await db.query(dbQuery);
-
-    const lastOperations = await db.query(queryLastOperations);
-
-    // const [allBins, data, lastOperations] = await Promise.all([
-    //   db.query(queryAllBins),
-    //   db.query(dbQuery),
-    //   db.query(queryLastOperations),
-    // ]);
-
-    const lastOpearionsObject = new Object();
-
-    lastOperations.forEach((element) => {
-      lastOpearionsObject[element.id] = element.serv_time;
-    });
-
-    const dataObject = new Object();
-
-    data.forEach((element) => {
-      dataObject[element.geoid] = element;
-    });
-
-    let response = allBins.map((bin) => {
-      const newBin = {
-        ...bin,
-        latitude: bin.position.split(" ")[0].split("(")[1],
-        longitude: bin.position.split(" ")[1].split(",")[0],
-        status: dataObject[bin.id_bin] ? "empty" : "unempty",
-        empted: !!dataObject[bin.id_bin],
-        time: lastOpearionsObject[bin.id_bin]
-          ? lastOpearionsObject[bin.id_bin]?.toISOString().split("T")[0]
-          : null,
-      };
-
-      delete newBin.position;
-      return newBin;
-    });
-
-    if (binStatusCondition !== "all") {
-      response = response.filter((item) => {
-        if (binStatusCondition === "empted") {
-          return item.empted === true;
-        }
-        return item.empted === false;
-      });
-    }
-
-    res.json(response);
+    const data = await db.query(query);
+    return res.json(data);
   } catch (error) {
-    res.status(500).json({ success: false, message: "Internal Server Error" });
+    return res.status(404).end("Server error");
   } finally {
     if (db) {
       await db.release();
@@ -106,66 +26,38 @@ const binById = async (req, res) => {
 
   //GET TODAY STATUS
   const id = parseInt(req.params.id) || "0";
+  const reqQuery = req.query;
 
-  const condition = `SELECT tcn_poi_schedule.serv_time FROM tcn_poi_schedule WHERE serv_time BETWEEN "${req.query.from}" AND (select current_timestamp) AND tcn_poi_schedule.geoid=${id}`;
-
-  const dbQuery = `IF EXISTS (${condition})
-                  THEN
-                    SELECT tcn_poi_schedule.geoid AS id_bin, tcn_poi_schedule.serv_time, tcn_poi_schedule.VehicleID AS emptied_by,tc_geofences.description, tc_geofences.area AS position,tcn_centers.center_name, tcn_routs.rout_code, tc_drivers.name AS driverName, tc_drivers.phone AS driver_phone, tcn_bin_type.bintype FROM tcn_poi_schedule
-                    JOIN tc_geofences ON tcn_poi_schedule.geoid=tc_geofences.id
-                    JOIN tcn_centers ON tc_geofences.centerid=tcn_centers.id
-                    JOIN tcn_routs ON tc_geofences.routid=tcn_routs.id
-                    JOIN tc_drivers ON tcn_routs.driverid=tc_drivers.id
-                    JOIN tcn_bin_type ON tc_geofences.bintypeid=tcn_bin_type.id
-                    WHERE tcn_poi_schedule.serv_time BETWEEN "${req.query.from}" AND (select current_timestamp) AND tcn_poi_schedule.geoid=${id} AND tc_geofences.attributes LIKE '%"bins": "yes"%' AND JSON_EXTRACT(tc_geofences.attributes, "$.cartoon") IS NULL LIMIT 1;
-                  ELSE
-                    SELECT tc_geofences.id AS id_bin, tc_geofences.description, tc_geofences.area AS position, tcn_centers.center_name AS center, tcn_routs.rout_code AS route, tc_drivers.name AS driverName, tc_drivers.phone AS driver_phone, tcn_bin_type.bintype FROM tc_geofences
-                    JOIN tcn_centers ON tc_geofences.centerid=tcn_centers.id
-                    JOIN tcn_routs ON tc_geofences.routid=tcn_routs.id
-                    JOIN tc_drivers ON tcn_routs.driverid=tc_drivers.id
-                    JOIN tcn_bin_type ON tc_geofences.bintypeid=tcn_bin_type.id
-                    WHERE tc_geofences.id=${id} AND tc_geofences.attributes LIKE '%"bins": "yes"%';
-                  END IF;`;
-
+  let query = `SELECT * FROM tcn_bins WHERE tcn_bins.id = ${id}`;
+  let data;
   try {
+    if (reqQuery?.get) {
+      switch (reqQuery.get) {
+        case "tag":
+          query = `SELECT DISTINCT tcn_tags.* FROM tcn_tags JOIN tcn_bins ON tcn_bins.tagid = tcn_tags.id WHERE tcn_bins.id=${id}`;
+
+          db = await dbPools.pool.getConnection();
+          data = await db.query(query);
+          return res.json(data[0]);
+        case "contract":
+          query = `SELECT DISTINCT tcn_contracts.* FROM tcn_contracts JOIN tcn_bins ON tcn_bins.contractid = tcn_contracts.id WHERE tcn_bins.id=${id}`;
+
+          db = await dbPools.pool.getConnection();
+          data = await db.query(query);
+          return res.json(data[0]);
+        default:
+          break;
+      }
+    }
+
     db = await dbPools.pool.getConnection();
-    const data = await db.query(dbQuery);
-
-    const last7DaysQuery = `SELECT tcn_poi_schedule.serv_time, tcn_poi_schedule.VehicleID AS emptied_by FROM tcn_poi_schedule WHERE tcn_poi_schedule.serv_time BETWEEN "${LASTWEEK()}" AND (select current_timestamp) AND  tcn_poi_schedule.geoid=${id}`;
-
-    const last7DaysStatus = await db.query(last7DaysQuery);
-
-    //Check which day is empted and not
-    const lastSevenDaysCheck = LAST7DAYS().map((day) => {
-      return {
-        date: day,
-        status: last7DaysStatus.some(
-          (bin) => bin.serv_time.toISOString().split("T")[0] === day
-        )
-          ? "empty"
-          : "unempty",
-        emptedTime: last7DaysStatus
-          .filter((bin) => bin.serv_time.toISOString().split("T")[0] === day)
-          .map((ele) => ele.serv_time)[0],
-        emptiedBy: last7DaysStatus.filter(
-          (bin) => bin.serv_time.toISOString().split("T")[0] === day
-        )[0]?.emptied_by,
-      };
-    });
-
-    const response = [
-      ...data[0].map((ele) => ({
-        ...ele,
-        driver_phone: `${ele.driver_phone}`,
-        latitude: ele.position.split(" ")[0].split("(")[1],
-        longitude: ele.position.split(" ")[1].split(",")[0],
-        status: !!ele.serv_time ? "empty" : "unempty",
-      })),
-      { last7Days: lastSevenDaysCheck.reverse() },
-    ];
-    res.json(response);
+    data = await db.query(query);
+    if (data.length) {
+      return res.json(data[0]);
+    }
+    return res.json({});
   } catch (error) {
-    res.json({ error: error.message });
+    return res.status(400).end("Server Error");
   } finally {
     if (db) {
       await db.release();
@@ -395,52 +287,24 @@ const summary = async (req, res) => {
 };
 
 // Patch Controllers
-
-const updateBin = async (req, res) => {
+const updateBin = () => {};
+export const putBin = async (req, res) => {
   let db;
 
   const body = req.body;
+  const id = req.params.id;
+
+  const updateValues = fitUpdateValues(body);
+
+  const query = `UPDATE tcn_bins SET ${updateValues} WHERE tcn_bins.id=?`;
 
   // Check if the target id is exist
   try {
     db = await dbPools.pool.getConnection();
-    const query = `SELECT tc_geofences.id FROM tc_geofences WHERE tc_geofences.id='${body.id_bin}' AND tc_geofences.attributes LIKE '%"bins": "yes"%' AND JSON_EXTRACT(tc_geofences.attributes, "$.cartoon") IS NULL`;
-    const targetExist = await db.query(query);
-
-    if (!targetExist?.length) {
-      throw new Error("You try to modify a none exist element");
-    }
-
-    if (body.position) {
-      // Rename position property
-      body.area = `CIRCLE(${body.position},7)`;
-      delete body.position;
-    }
-
-    let keyValue = "";
-
-    Object.keys(body).forEach((key, index, array) => {
-      // Skip the id_bin
-      if (key === "id_bin") return;
-
-      keyValue += `${key}='${body[key]}'`;
-
-      if (index === array.length - 1) return;
-
-      keyValue += ",";
-    });
-
-    const updateQuery = `UPDATE tc_geofences SET ${keyValue} WHERE tc_geofences.id='${body.id_bin}'`;
-
-    await db.query(updateQuery);
-
-    res
-      .status(204)
-      .json({ success: true, message: "Item updated successfully" });
+    await db.query(query, [id]);
+    return res.status(200).end();
   } catch (e) {
-    res
-      .status(400)
-      .json({ success: false, message: "Item cannot updated server error" });
+    res.status(400).end("Server Error");
   } finally {
     if (db) {
       await db.release();
@@ -448,27 +312,12 @@ const updateBin = async (req, res) => {
   }
 };
 
-// Put Controller
+// Post Controller
 
 const addBin = async (req, res) => {
   let db;
 
   const body = req.body;
-  delete body.id_bin;
-
-  // Optimize properties for DB
-  if (body.position) {
-    // Rename position property
-    body.area = `CIRCLE(${body.position},7)`;
-    delete body.position;
-  }
-  // Add attributes value
-
-  body.attributes = {
-    color: "#3f51b5",
-    bins: "yes",
-    ...body,
-  };
 
   const flatValues = Object.values(body)
     .map((value) => {
@@ -484,18 +333,15 @@ const addBin = async (req, res) => {
 
   try {
     db = await dbPools.pool.getConnection();
-    const addQuery = `INSERT INTO tc_geofences (${Object.keys(body).join(
+    const addQuery = `INSERT INTO tcn_bins (${Object.keys(body).join(
       ", "
     )}) VALUES (${flatValues});`;
 
-    const addRow = await db.query(addQuery);
+    await db.query(addQuery);
 
-    res.status(200).json({
-      sccuess: true,
-      message: "Entries added successfully",
-    });
+    return res.status(200).end();
   } catch (e) {
-    res.status(400).json({ success: false });
+    return res.status(400).end("Server Error");
   } finally {
     if (db) {
       await db.release();
@@ -506,29 +352,18 @@ const addBin = async (req, res) => {
 const deleteBin = async (req, res) => {
   let db;
 
-  const body = req.body;
-
-  // body.selected contains ids of bins you want to delete
-
+  const id = req.params.id;
   try {
     db = await dbPools.pool.getConnection();
-    if (body.selected.length > 10) {
-      throw new Error(
-        "You cannot delete more than 10 items for security reasons"
-      );
-    }
-    const addQuery = `DELETE FROM tc_geofences WHERE tc_geofences.id IN (${Object.values(
-      body.selected
-    ).join(", ")});`;
+
+    const addQuery = `DELETE FROM tcn_bins WHERE tcn_bins.id = ${id}`;
 
     await db.query(addQuery);
 
-    res.status(200).json({
-      sccuess: true,
-      message: "Entries deleted successfully",
-    });
+    res.status(200).end("DELETED");
   } catch (error) {
-    res.status(400).json({ success: false, message: error.message });
+    console.log(error);
+    res.status(400).end("Server Error");
   } finally {
     if (db) {
       await db.release();

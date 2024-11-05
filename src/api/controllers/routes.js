@@ -3,13 +3,13 @@ import { flatArray } from "../helpers/utils.js";
 
 export const routes = async (req, res) => {
   let db;
-  const query = "SELECT * FROM tcn_routs";
+  const query = "SELECT * FROM tcn_routes";
   try {
     db = await dbPools.pool.getConnection();
     const dbQuery = await db.query(query);
-    res.json(dbQuery);
+    return res.json(dbQuery);
   } catch (error) {
-    res.status(400).end();
+    return res.status(400).end();
   } finally {
     if (db) {
       await db.release();

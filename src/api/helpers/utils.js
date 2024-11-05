@@ -35,3 +35,22 @@ export const flatArray = (arr) =>
       return value;
     })
     .join(", ");
+
+// Flat body values for fit sql update syntax
+
+export const fitUpdateValues = (body, skipedValues = []) => {
+  let keyValue = "";
+  Object.keys(body).forEach((key, index, array) => {
+    // Skip the id_bin
+    if (skipedValues.includes(key)) return;
+
+    if (typeof body[key] === "number" || body[key] === null)
+      keyValue += `${key}=${body[key]}`;
+    else keyValue += `${key}="${body[key]}"`;
+
+    if (index === array.length - 1) return;
+
+    keyValue += ",";
+  });
+  return keyValue;
+};
