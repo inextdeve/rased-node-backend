@@ -1,14 +1,22 @@
 import dbPools from "../db/config/index.js";
 
-export const userOwner = async (req, res) => {
+export const getUser = async (req, res) => {
   let db;
-  const reqQuery = req.query;
-  console.log(reqQuery);
-  return res.end("Yes");
-  const query = "SELECT * FROM tcn_bins";
 
+  //GET TODAY STATUS
+  const id = parseInt(req.params.id) || "0";
+
+  let query = `SELECT * FROM tc_users WHERE tc_users.id = ${id}`;
+  let data;
   try {
     db = await dbPools.pool.getConnection();
-    const data = await db.query(query);
-  } catch (error) {}
+    data = await db.query(query);
+    if (data.length) {
+      return res.json(data[0]);
+    }
+    return res.status(404).json({});
+  } catch (error) {
+    return res.status(400).end();
+  } finally {
+  }
 };
