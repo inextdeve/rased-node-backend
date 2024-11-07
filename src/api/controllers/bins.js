@@ -304,6 +304,7 @@ export const putBin = async (req, res) => {
     await db.query(query, [id]);
     return res.status(200).end();
   } catch (e) {
+    console.log(e);
     res.status(400).end("Server Error");
   } finally {
     if (db) {

@@ -4,9 +4,9 @@ import { fitUpdateValues } from "../helpers/utils.js";
 export const companies = async (req, res) => {
   let db;
 
-  let query = `SELECT tcn_companies.*, 
+  let query = `SELECT tcn_companies.*,
                  COUNT(tcn_contracts.id) AS contracts
-                 FROM tcn_companies 
+                 FROM tcn_companies
                  LEFT JOIN tcn_contracts  ON tcn_companies.id = tcn_contracts.companyid
                  GROUP BY tcn_companies.id`;
 
