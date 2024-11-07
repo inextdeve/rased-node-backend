@@ -66,7 +66,12 @@ export const postCompany = async (req, res) => {
       message: "Entries added successfully",
     });
   } catch (error) {
+    console.log(error);
     res.status(400).end("Server error");
+  } finally {
+    if (db) {
+      await db.release();
+    }
   }
 };
 // PUT UPDATE
