@@ -119,3 +119,17 @@ export const getCompanyContracts = async (req, res) => {
     }
   }
 };
+
+export const deleteCompany = async (req, res) => {
+  let db;
+  const query = "DELETE FROM tcn_companies WHERE id=?";
+  const id = req.params.id;
+
+  try {
+    db = await dbPools.pool.getConnection();
+    await db.query(query, [id]);
+    return res.status(200).end();
+  } catch (error) {
+    return res.status(404).end("Server error");
+  }
+};
