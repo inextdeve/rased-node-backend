@@ -6,28 +6,25 @@ import dbPools from "../db/config/index.js";
  */
 
 const tokenValidation = async (token, fn) => {
-  console.log("Token");
-  return fn(true, null);
-
   let db;
   const tokenCache = memoryCache.get(`__TOKEN__${token}`);
   if (tokenCache) {
-    return fn(true, null);
+    return fn(true, tokenCache, null);
   } else {
     const dbQuery = `SELECT id FROM tc_users WHERE attributes LIKE '%"apitoken":"${token}"%'`;
 
     try {
       db = await dbPools.pool.getConnection();
-      const checkExist = await db.query(dbQuery);
+      const checkExistUser = await db.query(dbQuery);
 
-      if (checkExist.length) {
-        memoryCache.put(`__TOKEN__${token}`, true, 120000);
-        return fn(true, null);
+      if (checkExistUser.length) {
+        memoryCache.put(`__TOKEN__${token}`, checkExistUser[0].id, 120000);
+        return fn(true, checkExistUser[0].id, null);
       } else {
         throw new Error("Invalid Token");
       }
     } catch (error) {
-      return fn(false, { error: error.message });
+      return fn(false, null, { error: error.message });
     } finally {
       if (db) {
         await db.release();

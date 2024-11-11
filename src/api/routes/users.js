@@ -1,7 +1,9 @@
 import express from "express";
-import { getUser } from "../controllers/users.js";
+import { getUser, isTokenUnique } from "../controllers/users.js";
 
 const router = express.Router();
+
+router.get("/token_unique", isTokenUnique);
 
 router.get("/:id", getUser);
 

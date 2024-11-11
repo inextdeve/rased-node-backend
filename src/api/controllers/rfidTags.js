@@ -3,10 +3,10 @@ import { fitUpdateValues } from "../helpers/utils.js";
 
 export const tags = async (req, res) => {
   let db;
-  const query = "SELECT * FROM tcn_tags";
+  const query = "SELECT * FROM tcn_tags WHERE userid=?";
   try {
     db = await dbPools.pool.getConnection();
-    const tags = await db.query(query);
+    const tags = await db.query(query, [req.userId]);
     return res.json(tags);
   } catch (error) {
     return res.status(404).end("Server error");
@@ -22,9 +22,9 @@ export const getTag = async (req, res) => {
   const id = parseInt(req.params.id);
   const reqQuery = req.query;
 
-  console.log(reqQuery);
+  console.log(req.userId);
 
-  let query = "SELECT * FROM tcn_tags WHERE id=?";
+  let query = "SELECT * FROM tcn_tags WHERE id=? AND userid=?";
 
   try {
     if (reqQuery?.get) {
@@ -38,10 +38,11 @@ export const getTag = async (req, res) => {
     }
 
     db = await dbPools.pool.getConnection();
-    const data = await db.query(query);
+    const data = await db.query(query, [id, req.userId]);
     return res.json(data?.[0] || {});
   } catch (error) {
     console.log(error);
+
     return res.status(404).end("Server error");
   } finally {
     if (db) {
@@ -57,9 +58,9 @@ export const postRfidTag = async (req, res) => {
 
   const query = `INSERT INTO tcn_tags (${Object.keys(body).join(
     ", "
-  )}) VALUES (${Object.values(body)
+  )}, userid) VALUES (${Object.values(body)
     .map((val) => `'${val}'`)
-    .join(",")});`;
+    .join(",")}, ${req.userId});`;
 
   try {
     db = await dbPools.pool.getConnection();
@@ -111,14 +112,13 @@ export const deleteTag = async (req, res) => {
 
   const id = parseInt(req.params.id);
 
-  const query = `DELETE FROM tcn_tags WHERE tcn_tags.id=?`;
+  const query = `DELETE FROM tcn_tags WHERE tcn_tags.id=? AND tcn_tags.userid=?`;
 
   try {
     db = await dbPools.pool.getConnection();
-    await db.query(query, [id]);
+    await db.query(query, [id, req.userId]);
     return res.status(200).end();
   } catch (error) {
-    console.log(error);
     return res.status(400).end("Server error");
   } finally {
     if (db) {

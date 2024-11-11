@@ -6,11 +6,11 @@ import { fitUpdateValues } from "../helpers/utils.js";
 const bins = async (req, res) => {
   let db;
 
-  const query = "SELECT * FROM tcn_bins";
+  const query = "SELECT * FROM tcn_bins WHERE userid=?";
 
   try {
     db = await dbPools.pool.getConnection();
-    const data = await db.query(query);
+    const data = await db.query(query, [req.userId]);
     return res.json(data);
   } catch (error) {
     return res.status(404).end("Server error");
@@ -336,7 +336,7 @@ const addBin = async (req, res) => {
     db = await dbPools.pool.getConnection();
     const addQuery = `INSERT INTO tcn_bins (${Object.keys(body).join(
       ", "
-    )}) VALUES (${flatValues});`;
+    )}, userid) VALUES (${flatValues}, ${req.userId});`;
 
     await db.query(addQuery);
 

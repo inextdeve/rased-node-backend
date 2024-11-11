@@ -39,6 +39,7 @@ export const flatArray = (arr) =>
 // Flat body values for fit sql update syntax
 
 export const fitUpdateValues = (body, skipedValues = []) => {
+  console.log(body);
   let keyValue = "";
   Object.keys(body).forEach((key, index, array) => {
     // Skip the id_bin
@@ -52,5 +53,8 @@ export const fitUpdateValues = (body, skipedValues = []) => {
 
     keyValue += ",";
   });
-  return keyValue;
+
+  return keyValue.lastIndexOf(",") === keyValue.length - 1
+    ? keyValue.slice(0, keyValue.length - 1)
+    : keyValue;
 };

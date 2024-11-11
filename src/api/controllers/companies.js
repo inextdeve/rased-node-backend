@@ -8,6 +8,7 @@ export const companies = async (req, res) => {
                  COUNT(tcn_contracts.id) AS contracts
                  FROM tcn_companies
                  LEFT JOIN tcn_contracts  ON tcn_companies.id = tcn_contracts.companyid
+                 WHERE tcn_companies.userid = ${req.userId}
                  GROUP BY tcn_companies.id`;
 
   try {
@@ -22,19 +23,18 @@ export const companies = async (req, res) => {
 
     return res.json(data);
   } catch (error) {
-    console.log("Ther is error", "error");
     return res.status(404).end("Server error");
   }
 };
 
 export const getCompany = async (req, res) => {
   let db;
-  const query = "SELECT * FROM tcn_companies WHERE id=";
+  const query = "SELECT * FROM tcn_companies WHERE id=? AND userid=?";
   const id = req.params.id;
 
   try {
     db = await dbPools.pool.getConnection();
-    const data = await db.query(query, [id]);
+    const data = await db.query(query, [id, req.userId]);
     return res.json(data);
   } catch (error) {
     return res.status(404).end("Server error");
@@ -55,7 +55,7 @@ export const postCompany = async (req, res) => {
 
   const flatKeys = Object.keys(body).join(", ");
 
-  const query = `INSERT INTO tcn_companies (${flatKeys}) VALUES (${flatValues});`;
+  const query = `INSERT INTO tcn_companies (${flatKeys}, userid) VALUES (${flatValues}, ${req.userId});`;
 
   try {
     db = await dbPools.pool.getConnection();
@@ -66,7 +66,6 @@ export const postCompany = async (req, res) => {
       message: "Entries added successfully",
     });
   } catch (error) {
-    console.log(error);
     res.status(400).end("Server error");
   } finally {
     if (db) {
@@ -81,18 +80,15 @@ export const putCompany = async (req, res) => {
   const body = req.body;
   const id = req.params.id;
 
-  console.log(id);
-  console.log(body);
   const updateValues = fitUpdateValues(body);
 
-  const query = `UPDATE tcn_companies SET ${updateValues} WHERE tcn_companies.id=?`;
-  console.log(query);
+  const query = `UPDATE tcn_companies SET ${updateValues} WHERE tcn_companies.id=? AND tcn_companies.userid=?`;
+
   try {
     db = await dbPools.pool.getConnection();
-    await db.query(query, [id]);
+    await db.query(query, [id, req.userId]);
     return res.status(200).end();
   } catch (error) {
-    console.log(error);
     return res.status(400).end("Server error");
   } finally {
     if (db) {
@@ -102,14 +98,13 @@ export const putCompany = async (req, res) => {
 };
 
 export const getCompanyContracts = async (req, res) => {
-  console.log("GET COMPANY CONTRACTS");
   let db;
   const id = req.params.id;
   const query = `SELECT * FROM tcn_contracts WHERE companyid=?`;
 
   try {
     db = await dbPools.pool.getConnection();
-    let data = await db.query(query, [id]);
+    let data = await db.query(query, [id, req.userId]);
     return res.json(data);
   } catch (error) {
     return res.status(404).end("Server error");

@@ -20,3 +20,26 @@ export const getUser = async (req, res) => {
   } finally {
   }
 };
+
+export const isTokenUnique = async (req, res) => {
+  let db;
+  const token = req.query?.token;
+  if (!token) return res.status(400).send("No token is given");
+  const dbQuery = `SELECT id FROM tc_users WHERE attributes LIKE '%"apitoken":"${token}"%'`;
+
+  try {
+    console.log("IS HERE");
+    db = await dbPools.pool.getConnection();
+    const data = await db.query(dbQuery);
+    if (data.length) {
+      throw new Error("Already Exist");
+    }
+    res.status(200).send("OK");
+  } catch (error) {
+    res.status(403).send("Already Exist");
+  } finally {
+    if (db) {
+      await db.release();
+    }
+  }
+};
