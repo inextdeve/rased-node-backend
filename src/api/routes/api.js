@@ -12,6 +12,7 @@ import usersRouter from "./users.js";
 import companiesRouter from "./companies.js";
 import contractsRouter from "./contracts.js";
 import connectionsRouter from "./connections.js";
+import contractorsRouter from "./contractors.js";
 
 import auth from "../middlewares/auth.js";
 import moment from "moment";
@@ -37,5 +38,6 @@ router.use("/users", usersRouter);
 router.use("/companies", companiesRouter);
 router.use("/contracts", contractsRouter);
 router.use("/connections", connectionsRouter);
+router.use("/contractors", contractorsRouter);
 
 export default router;
