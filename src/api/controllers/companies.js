@@ -29,10 +29,26 @@ export const companies = async (req, res) => {
 
 export const getCompany = async (req, res) => {
   let db;
-  const query = "SELECT * FROM tcn_companies WHERE id=? AND userid=?";
+  const reqQuery = req.query;
+
+  let query = "SELECT * FROM tcn_companies WHERE id=? AND userid=?";
   const id = req.params.id;
 
   try {
+    if (reqQuery?.get) {
+      switch (reqQuery.get) {
+        case "contractor":
+          query = `SELECT DISTINCT tcn_contractors.* FROM tcn_contractors JOIN tcn_companies ON tcn_companies.contractorid = tcn_contractors.id WHERE tcn_companies.id=${id}`;
+
+          db = await dbPools.pool.getConnection();
+          const data = await db.query(query);
+          return res.json(data[0]);
+
+        default:
+          break;
+      }
+    }
+
     db = await dbPools.pool.getConnection();
     const data = await db.query(query, [id, req.userId]);
 
@@ -79,7 +95,7 @@ export const putCompany = async (req, res) => {
   const body = req.body;
   const id = req.params.id;
 
-  const updateValues = fitUpdateValues(body, ["contractorid", "id", "userid"]);
+  const updateValues = fitUpdateValues(body, ["id", "userid"]);
 
   const query = `UPDATE tcn_companies SET ${updateValues} WHERE tcn_companies.id=? AND tcn_companies.userid=?`;
 
