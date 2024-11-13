@@ -35,9 +35,10 @@ export const getCompany = async (req, res) => {
   try {
     db = await dbPools.pool.getConnection();
     const data = await db.query(query, [id, req.userId]);
-    return res.json(data);
+
+    return data?.[0] ? res.json(data[0]) : res.status(404).send("Not Found");
   } catch (error) {
-    return res.status(404).end("Server error");
+    return res.status(400).end("Server error");
   }
 };
 
@@ -61,12 +62,10 @@ export const postCompany = async (req, res) => {
     db = await dbPools.pool.getConnection();
     await db.query(query, [flatValues]);
 
-    res.status(200).json({
-      sccuess: true,
-      message: "Entries added successfully",
-    });
+    res.status(200).send("OK");
   } catch (error) {
-    res.status(400).end("Server error");
+    console.log(error);
+    res.status(400).send("Server error");
   } finally {
     if (db) {
       await db.release();
@@ -80,16 +79,16 @@ export const putCompany = async (req, res) => {
   const body = req.body;
   const id = req.params.id;
 
-  const updateValues = fitUpdateValues(body);
+  const updateValues = fitUpdateValues(body, ["contractorid", "id", "userid"]);
 
   const query = `UPDATE tcn_companies SET ${updateValues} WHERE tcn_companies.id=? AND tcn_companies.userid=?`;
 
   try {
     db = await dbPools.pool.getConnection();
     await db.query(query, [id, req.userId]);
-    return res.status(200).end();
+    return res.status(200).send();
   } catch (error) {
-    return res.status(400).end("Server error");
+    return res.status(400).send("Server error");
   } finally {
     if (db) {
       await db.release();

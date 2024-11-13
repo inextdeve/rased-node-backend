@@ -7,23 +7,23 @@ export const contractors = async (req, res) => {
   let query = `SELECT tcn_contractors.*,
                  COUNT(tcn_companies.id) AS companies
                  FROM tcn_contractors
-                 LEFT JOIN tcn_companies  ON tcn_contractors.id = tcn_companies.companyid
-                 WHERE tcn_companies.userid = ${req.userId}
+                 LEFT JOIN tcn_companies  ON tcn_contractors.id = tcn_companies.contractorid
+                 WHERE tcn_contractors.userid = ${req.userId}
                  GROUP BY tcn_contractors.id`;
 
   try {
     db = await dbPools.pool.getConnection();
     let data = await db.query(query);
     if (data.length > 0) {
-      data = data.map((company) => ({
-        ...company,
-        contracts: parseInt(company.contracts),
+      data = data.map((contractor) => ({
+        ...contractor,
+        companies: parseInt(contractor.companies),
       }));
     }
 
     return res.json(data);
   } catch (error) {
-    return res.status(404).end("Server error");
+    return res.status(400).send("Server error");
   }
 };
 
@@ -37,7 +37,7 @@ export const getContractor = async (req, res) => {
     const data = await db.query(query, [id, req.userId]);
     return res.json(data);
   } catch (error) {
-    return res.status(404).end("Server error");
+    return res.status(404).send("Server error");
   }
 };
 
@@ -59,14 +59,11 @@ export const postContractor = async (req, res) => {
 
   try {
     db = await dbPools.pool.getConnection();
-    await db.query(query, [flatValues]);
+    await db.query(query);
 
-    res.status(200).json({
-      sccuess: true,
-      message: "Entries added successfully",
-    });
+    res.status(200).send("OK");
   } catch (error) {
-    res.status(400).end("Server error");
+    res.status(400).send("Server error");
   } finally {
     if (db) {
       await db.release();
@@ -87,9 +84,9 @@ export const putContractor = async (req, res) => {
   try {
     db = await dbPools.pool.getConnection();
     await db.query(query, [id, req.userId]);
-    return res.status(200).end();
+    return res.status(200).send("OK");
   } catch (error) {
-    return res.status(400).end("Server error");
+    return res.status(400).send("Server error");
   } finally {
     if (db) {
       await db.release();
@@ -104,7 +101,7 @@ export const getContractorCompanies = async (req, res) => {
 
   try {
     db = await dbPools.pool.getConnection();
-    let data = await db.query(query, [id, req.userId]);
+    let data = await db.query(query, [id]);
     return res.json(data);
   } catch (error) {
     return res.status(404).end("Server error");

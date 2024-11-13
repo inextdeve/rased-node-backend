@@ -13,7 +13,7 @@ const router = express.Router();
 router.get("/", contractors);
 router.get("/:id", getContractor);
 router.delete("/:id", deleteContractor);
-router.get("/:id/contracts", getContractorCompanies);
+router.get("/:id/companies", getContractorCompanies);
 router.put("/:id", putContractor);
 router.post("/", postContractor);
 export default router;
