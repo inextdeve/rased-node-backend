@@ -24,8 +24,10 @@ export const getUser = async (req, res) => {
 export const isTokenUnique = async (req, res) => {
   let db;
   const token = req.query?.token;
+  const userId = req.query?.userId;
+
   if (!token) return res.status(400).send("No token is given");
-  const dbQuery = `SELECT id FROM tc_users WHERE attributes LIKE '%"apitoken":"${token}"%'`;
+  const dbQuery = `SELECT id FROM tc_users WHERE attributes LIKE '%"apitoken":"${token}"%' AND id != ${userId}`;
 
   try {
     console.log("IS HERE");
@@ -36,6 +38,7 @@ export const isTokenUnique = async (req, res) => {
     }
     res.status(200).send("OK");
   } catch (error) {
+    console.log(error);
     res.status(403).send("Already Exist");
   } finally {
     if (db) {
