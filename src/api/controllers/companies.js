@@ -3,17 +3,27 @@ import { fitUpdateValues } from "../helpers/utils.js";
 
 export const companies = async (req, res) => {
   let db;
+  const { contractorid } = req.query;
 
   let query = `SELECT tcn_companies.*,
                  COUNT(tcn_contracts.id) AS contracts
                  FROM tcn_companies
                  LEFT JOIN tcn_contracts  ON tcn_companies.id = tcn_contracts.companyid
-                 WHERE tcn_companies.userid = ${req.userId}
-                 GROUP BY tcn_companies.id`;
+                 WHERE tcn_companies.userid = ?`;
+
+  const params = [req.userId];
+
+  // Add filters dynamically
+  if (contractorid) {
+    query += " AND tcn_companies.contractorid = ?";
+    params.push(contractorid);
+  }
+
+  query += " GROUP BY tcn_companies.id";
 
   try {
     db = await dbPools.pool.getConnection();
-    let data = await db.query(query);
+    let data = await db.query(query, params);
     if (data.length > 0) {
       data = data.map((company) => ({
         ...company,
