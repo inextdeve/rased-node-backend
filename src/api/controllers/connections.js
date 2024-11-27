@@ -7,19 +7,27 @@ export const binTagConnection = async (req, res) => {
   try {
     if (binid === undefined || tagid === undefined)
       throw new Error("Bad Request");
+
     db = await dbPools.pool.getConnection();
+
     if (binid === null) {
-      const getBinId = await db.query("SELECT binid FROM tcn_tags WHERE id=?", [
+      const getBinId = await db.query("SELECT id FROM tcn_bins WHERE tagid=?", [
         tagid,
       ]);
 
-      binid = getBinId[0]?.binid;
+      binid = getBinId[0]?.id;
 
       tagid = null;
-      if (binid === null) {
+
+      if (!binid) {
+        return res.status(200).send("OK");
+      } else {
+        await db.query("UPDATE tcn_bins SET tagid=? WHERE id", [null, binid]);
         return res.status(200).send("OK");
       }
     }
+
+    console.log("Update connections ", { binid, tagid });
 
     await db.query("CALL UpdateBinTagRelationship(?, ?)", [tagid, binid]);
     return res.status(200).send("OK");

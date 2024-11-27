@@ -90,40 +90,39 @@ const nearbyStops = async (req, res) => {
   }
 };
 
-export const speedSummary = async (req, res) => {
-  const queryParams = req.query;
+// export const speedSummary = async (req, res) => {
+//   console.log("Speed Summary");
+//   const queryParams = req.query;
 
-  if (!dateTimeParamsSchema.safeParse(queryParams).success) {
-    return res.status(400).send("query params error");
-  }
+//   if (!dateTimeParamsSchema.safeParse(queryParams).success) {
+//     return res.status(400).send("query params error");
+//   }
 
-  let db;
-  const query = "SELECT speed FROM tc_positions WHERE fixtime BETWEEN ? AND ?";
+//   let db;
+//   const query = "SELECT speed FROM tc_positions WHERE fixtime BETWEEN ? AND ?";
 
-  try {
-    db = await dbPools.pool.getConnection();
-    console.log("Speed asu", query);
+//   try {
+//     db = await dbPools.pool.getConnection();
 
-    const data = await db.query(query, [queryParams.from, queryParams.to]);
+//     const data = await db.query(query, [queryParams.from, queryParams.to]);
 
-    const response = {
-      maximum: Math.max(...data.map((device) => device.speed)),
-      minimum: Math.min(...data.map((device) => device.speed)),
-      average: countRate(
-        data.length,
-        data.reduce((sum, device) => sum + device.speed, 0)
-      ),
-    };
+//     const response = {
+//       maximum: Math.max(...data.map((device) => device.speed)),
+//       average: countRate(
+//         data.length,
+//         data.reduce((sum, device) => sum + device.speed, 0)
+//       ),
+//     };
 
-    return res.status(200).json(response);
-  } catch (error) {
-    console.log(error);
-    return res.status(404).send("Server error");
-  } finally {
-    if (db) {
-      await db.release();
-    }
-  }
-};
+//     return res.status(200).json(response);
+//   } catch (error) {
+//     console.log(error);
+//     return res.status(404).send("Server error");
+//   } finally {
+//     if (db) {
+//       await db.release();
+//     }
+//   }
+// };
 
 export { summary, nearbyStops };

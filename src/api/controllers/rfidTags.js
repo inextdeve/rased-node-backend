@@ -1,5 +1,9 @@
 import dbPools from "../db/config/index.js";
-import { fitUpdateValues } from "../helpers/utils.js";
+import {
+  fitUpdateValues,
+  flatInsertKeys,
+  flatInsertValues,
+} from "../helpers/utils.js";
 
 export const tags = async (req, res) => {
   let db;
@@ -56,21 +60,22 @@ export const postRfidTag = async (req, res) => {
 
   const body = req.body;
 
-  console.log(fitUpdateValues(body));
-
-  const query = `INSERT INTO tcn_tags (${Object.keys(body).join(
-    ", "
-  )}, userid) VALUES (${fitUpdateValues(body)}, ${req.userId});`;
+  const query = `INSERT INTO tcn_tags (${flatInsertKeys(body, [
+    "binid",
+  ])}, userid) VALUES (${flatInsertValues(body, ["binid"])}, ${req.userId});`;
 
   try {
-    console.log(query);
     db = await dbPools.pool.getConnection();
-    await db.query(query);
+    let data = await db.query(query);
 
-    res.status(200).json({
-      sccuess: true,
-      message: "Entries added successfully",
-    });
+    if (body.binid) {
+      await db.query("CALL UpdateBinTagRelationship(?, ?)", [
+        parseInt(data.insertId),
+        body.binid,
+      ]);
+    }
+
+    res.status(200).send("OK");
   } catch (error) {
     console.log(error);
     res.status(400).end("Server error");

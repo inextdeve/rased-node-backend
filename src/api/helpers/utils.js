@@ -72,10 +72,28 @@ export const flatInsertValues = (body, skippedValues = []) => {
 
     if (index === keys.length - 1) return;
 
-    keyValue += ",";
+    values += ",";
   });
   //Check this you can remove this line because no need to check we checking before in 73
-  return keyValue.lastIndexOf(",") === keyValue.length - 1
-    ? keyValue.slice(0, keyValue.length - 1)
-    : keyValue;
+  return values.lastIndexOf(",") === values.length - 1
+    ? values.slice(0, values.length - 1)
+    : values;
+};
+
+export const flatInsertKeys = (body, skippedValues = []) => {
+  let keys = "";
+  console.log("|", Object.keys(body));
+  Object.keys(body).forEach((key, index, keysArr) => {
+    //Don't add skipped values
+    if (skippedValues.includes(key)) return;
+
+    keys += `${key}`;
+
+    if (index === keysArr.length - 2) return;
+
+    keys += ",";
+  });
+  console.log("KEYS", keys);
+  //Check this you can remove this line because no need to check we checking before in 73
+  return keys;
 };
