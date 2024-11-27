@@ -13,7 +13,7 @@ import companiesRouter from "./companies.js";
 import contractsRouter from "./contracts.js";
 import connectionsRouter from "./connections.js";
 import contractorsRouter from "./contractors.js";
-import eventsRouter from "./events.js";
+// import eventsRouter from "./events.js";
 
 import auth from "../middlewares/auth.js";
 import moment from "moment";
@@ -42,6 +42,6 @@ router.use("/companies", companiesRouter);
 router.use("/contracts", contractsRouter);
 router.use("/connections", connectionsRouter);
 router.use("/contractors", contractorsRouter);
-router.use("/events", eventsRouter);
+// router.use("/events", eventsRouter);
 
 export default router;
