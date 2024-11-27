@@ -6,13 +6,20 @@ import { fitUpdateValues } from "../helpers/utils.js";
 const bins = async (req, res) => {
   let db;
 
-  const query = "SELECT * FROM tcn_bins WHERE userid=?";
+  let query = "SELECT * FROM tcn_bins WHERE userid=?";
+
+  if (req.query?.contractid) {
+    console.log(req.query?.contractid);
+    query += " AND contractid=" + req.query.contractid;
+  }
 
   try {
     db = await dbPools.pool.getConnection();
     const data = await db.query(query, [req.userId]);
+    console.log("Data", data);
     return res.json(data);
   } catch (error) {
+    console.log(error);
     return res.status(404).end("Server error");
   } finally {
     if (db) {

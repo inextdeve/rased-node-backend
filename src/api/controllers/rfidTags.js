@@ -56,13 +56,14 @@ export const postRfidTag = async (req, res) => {
 
   const body = req.body;
 
+  console.log(fitUpdateValues(body));
+
   const query = `INSERT INTO tcn_tags (${Object.keys(body).join(
     ", "
-  )}, userid) VALUES (${Object.values(body)
-    .map((val) => `'${val}'`)
-    .join(",")}, ${req.userId});`;
+  )}, userid) VALUES (${fitUpdateValues(body)}, ${req.userId});`;
 
   try {
+    console.log(query);
     db = await dbPools.pool.getConnection();
     await db.query(query);
 

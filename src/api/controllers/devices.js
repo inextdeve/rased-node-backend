@@ -1,6 +1,8 @@
 import dbPools from "../db/config/index.js";
 import { TODAY } from "../helpers/constants.js";
 import { date, string, z } from "zod";
+import { dateTimeParamsSchema } from "../validations/zodSchemas.js";
+import { countRate } from "../helpers/utils.js";
 
 const NearbyStopsBodySchema = z.object({
   latitude: z.union([z.string(), z.number()]),
@@ -59,7 +61,7 @@ const nearbyStops = async (req, res) => {
     to: new Date(req.query.to),
   });
 
-  console.log(error)
+  console.log(error);
 
   if (!success) return res.status(400).end("Entries not valid");
 
@@ -87,4 +89,41 @@ const nearbyStops = async (req, res) => {
     }
   }
 };
+
+export const speedSummary = async (req, res) => {
+  const queryParams = req.query;
+
+  if (!dateTimeParamsSchema.safeParse(queryParams).success) {
+    return res.status(400).send("query params error");
+  }
+
+  let db;
+  const query = "SELECT speed FROM tc_positions WHERE fixtime BETWEEN ? AND ?";
+
+  try {
+    db = await dbPools.pool.getConnection();
+    console.log("Speed asu", query);
+
+    const data = await db.query(query, [queryParams.from, queryParams.to]);
+
+    const response = {
+      maximum: Math.max(...data.map((device) => device.speed)),
+      minimum: Math.min(...data.map((device) => device.speed)),
+      average: countRate(
+        data.length,
+        data.reduce((sum, device) => sum + device.speed, 0)
+      ),
+    };
+
+    return res.status(200).json(response);
+  } catch (error) {
+    console.log(error);
+    return res.status(404).send("Server error");
+  } finally {
+    if (db) {
+      await db.release();
+    }
+  }
+};
+
 export { summary, nearbyStops };

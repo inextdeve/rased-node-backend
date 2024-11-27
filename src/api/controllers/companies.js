@@ -125,7 +125,7 @@ export const putCompany = async (req, res) => {
 export const getCompanyContracts = async (req, res) => {
   let db;
   const id = req.params.id;
-  const query = `SELECT * FROM tcn_contracts WHERE companyid=?`;
+  const query = `SELECT * FROM tcn_contracts WHERE companyid=? AND userid=?`;
 
   try {
     db = await dbPools.pool.getConnection();

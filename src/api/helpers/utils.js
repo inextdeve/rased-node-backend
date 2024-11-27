@@ -58,3 +58,24 @@ export const fitUpdateValues = (body, skipedValues = []) => {
     ? keyValue.slice(0, keyValue.length - 1)
     : keyValue;
 };
+
+export const flatInsertValues = (body, skippedValues = []) => {
+  let values = "";
+
+  Object.keys(body).forEach((key, index, keys) => {
+    //Don't add skipped values
+    if (skippedValues.includes(key)) return;
+
+    if (typeof body[key] === "number" || body[key] === null)
+      values += `${body[key]}`;
+    else values += `"${body[key]}"`;
+
+    if (index === keys.length - 1) return;
+
+    keyValue += ",";
+  });
+  //Check this you can remove this line because no need to check we checking before in 73
+  return keyValue.lastIndexOf(",") === keyValue.length - 1
+    ? keyValue.slice(0, keyValue.length - 1)
+    : keyValue;
+};
