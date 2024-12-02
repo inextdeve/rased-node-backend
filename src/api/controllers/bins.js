@@ -6,10 +6,11 @@ import { fitUpdateValues } from "../helpers/utils.js";
 const bins = async (req, res) => {
   let db;
 
+  const reqQuery = req.query;
+
   let query = "SELECT * FROM tcn_bins WHERE userid=?";
 
-  if (req.query?.contractid) {
-    console.log(req.query?.contractid);
+  if (reqQuery?.contractid) {
     query += " AND contractid=" + req.query.contractid;
   }
 
