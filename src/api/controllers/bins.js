@@ -3,29 +3,156 @@ import dbPools from "../db/config/index.js";
 import { LAST7DAYS, LASTWEEK } from "../helpers/constants.js";
 import { fitUpdateValues } from "../helpers/utils.js";
 
-const bins = async (req, res) => {
+// const bins = async (req, res) => {
+//   let db;
+
+//   const reqQuery = req.query;
+
+//   let query = "SELECT * FROM tcn_bins WHERE userid=?";
+
+//   if (reqQuery?.contractid) {
+//     query += " AND contractid=" + req.query.contractid;
+//   }
+
+//   try {
+//     db = await dbPools.pool.getConnection();
+//     const data = await db.query(query, [req.userId]);
+//     console.log("Data", data);
+//     return res.json(data);
+//   } catch (error) {
+//     console.log(error);
+//     return res.status(404).end("Server error");
+//   } finally {
+//     if (db) {
+//       await db.release();
+//     }
+//   }
+// };
+
+export const bins = async (req, res) => {
   let db;
+  const { contractid, routeid, typeid, tagid, by, empted, from, to } =
+    req.query;
 
-  const reqQuery = req.query;
+  // Validation for required parameters
+  if (empted) {
+    if (!from || !to) {
+      return res
+        .status(400)
+        .send(
+          `Both "from" and "to" parameters are required when "empted" is specified.`
+        );
+    }
+  } else if (from || to) {
+    return res
+      .status(400)
+      .send(
+        `"from" and "to" parameters can only be used with the "empted" query.`
+      );
+  }
 
-  let query = "SELECT * FROM tcn_bins WHERE userid=?";
+  // Start building the base query
+  let query = `
+    SELECT 
+      b.*, 
+      c.name AS contract_name, 
+      r.route_code AS route_name, 
+      t.name AS type_name, 
+      tg.name AS tag_name
+  `;
 
-  if (reqQuery?.contractid) {
-    query += " AND contractid=" + req.query.contractid;
+  if (empted || from || to) {
+    query += `,
+      COUNT(h.rfidtag) AS empted_count
+    `;
+  }
+
+  query += `
+    FROM tcn_bins b
+    LEFT JOIN tcn_contracts c ON b.contractid = c.id
+    LEFT JOIN tcn_routes r ON b.routeid = r.id
+    LEFT JOIN tcn_binstypes t ON b.typeid = t.id
+    LEFT JOIN tcn_tags tg ON b.tagid = tg.id
+  `;
+
+  if (empted || from || to) {
+    query += `
+      LEFT JOIN tcb_rfid_history h ON b.tagid = h.rfidtag
+    `;
+  }
+
+  query += `
+    WHERE 1=1
+  `;
+
+  const params = [];
+
+  // Add filtering conditions based on the query parameters
+  if (contractid) {
+    query += " AND b.contractid = ?";
+    params.push(contractid);
+  }
+  if (routeid) {
+    query += " AND b.routeid = ?";
+    params.push(routeid);
+  }
+  if (typeid) {
+    query += " AND b.typeid = ?";
+    params.push(typeid);
+  }
+  if (tagid) {
+    query += " AND b.tagid = ?";
+    params.push(tagid);
+  }
+
+  // Add filtering for "empted"
+  if (empted) {
+    if (empted === "true") {
+      query += " AND h.rfidtag IS NOT NULL";
+    } else if (empted === "false") {
+      query += " AND h.rfidtag IS NULL";
+    } else {
+      return res.status(400).send(`Invalid "empted" parameter: ${empted}`);
+    }
+
+    // Add filtering for "from" and "to" since they are required with "empted"
+    query += " AND h.fixtime >= ? AND h.fixtime <= ?";
+    params.push(from, to);
+  }
+
+  // Add grouping if "by" is specified
+  if (by) {
+    switch (by) {
+      case "contracts":
+        query += " GROUP BY b.contractid, c.name";
+        query += " ORDER BY c.name";
+        break;
+      case "routes":
+        query += " GROUP BY b.routeid, r.name";
+        query += " ORDER BY r.name";
+        break;
+      case "types":
+        query += " GROUP BY b.typeid, t.name";
+        query += " ORDER BY t.name";
+        break;
+      case "tags":
+        query += " GROUP BY b.tagid, tg.name";
+        query += " ORDER BY tg.name";
+        break;
+      default:
+        return res.status(400).send(`Invalid "by" parameter: ${by}`);
+    }
   }
 
   try {
+    // Execute the query
     db = await dbPools.pool.getConnection();
-    const data = await db.query(query, [req.userId]);
-    console.log("Data", data);
-    return res.json(data);
+    const data = await db.query(query, params);
+    console.log(data);
+    res.status(200).json(data);
   } catch (error) {
-    console.log(error);
-    return res.status(404).end("Server error");
-  } finally {
-    if (db) {
-      await db.release();
-    }
+    console.error("Database query failed:", error);
+    res.status(500).send("An error occurred while fetching bins");
   }
 };
 
@@ -444,7 +571,6 @@ const updateBinStatus = async (req, res) => {
 };
 
 export {
-  bins,
   binById,
   binReports,
   binCategorized,

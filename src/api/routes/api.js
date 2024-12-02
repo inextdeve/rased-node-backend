@@ -20,13 +20,13 @@ import moment from "moment";
 
 const router = express.Router();
 router.use(auth);
-router.use((req, _, next) => {
-  if (!req.query.from)
-    req.query.from = new Date(
-      moment().format().split("T")[0] + "T00:00"
-    ).toISOString();
-  next();
-});
+// router.use((req, _, next) => {
+//   if (!req.query.from)
+//     req.query.from = new Date(
+//       moment().format().split("T")[0] + "T00:00"
+//     ).toISOString();
+//   next();
+// });
 
 router.use("/bins", binsRouter);
 router.use("/washing", washingRouter);
