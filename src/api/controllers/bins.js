@@ -31,6 +31,7 @@ import { fitUpdateValues } from "../helpers/utils.js";
 
 export const bins = async (req, res) => {
   let db;
+  const params = [];
   const { contractid, routeid, typeid, tagid, by, empted, from, to } =
     req.query;
 
@@ -61,11 +62,11 @@ export const bins = async (req, res) => {
       tg.name AS tag_name
   `;
 
-  if (empted || from || to) {
-    query += `,
-      COUNT(h.rfidtag) AS empted_count
-    `;
-  }
+  // if (empted || from || to) {
+  //   query += `,
+  //     COUNT(h.rfidtag) AS empted_count
+  //   `;
+  // }
 
   query += `
     FROM tcn_bins b
@@ -79,13 +80,14 @@ export const bins = async (req, res) => {
     query += `
       LEFT JOIN tcb_rfid_history h ON b.tagid = h.rfidtag
     `;
+    // Add filtering for "from" and "to" since they are required with "empted"
+    query += " AND h.fixtime >= ? AND h.fixtime <= ?";
+    params.push(from, to);
   }
 
   query += `
     WHERE 1=1
   `;
-
-  const params = [];
 
   // Add filtering conditions based on the query parameters
   if (contractid) {
@@ -111,36 +113,8 @@ export const bins = async (req, res) => {
       query += " AND h.rfidtag IS NOT NULL";
     } else if (empted === "false") {
       query += " AND h.rfidtag IS NULL";
-    } else {
+    } else if (empted !== "all") {
       return res.status(400).send(`Invalid "empted" parameter: ${empted}`);
-    }
-
-    // Add filtering for "from" and "to" since they are required with "empted"
-    query += " AND h.fixtime >= ? AND h.fixtime <= ?";
-    params.push(from, to);
-  }
-
-  // Add grouping if "by" is specified
-  if (by) {
-    switch (by) {
-      case "contracts":
-        query += " GROUP BY b.contractid, c.name";
-        query += " ORDER BY c.name";
-        break;
-      case "routes":
-        query += " GROUP BY b.routeid, r.name";
-        query += " ORDER BY r.name";
-        break;
-      case "types":
-        query += " GROUP BY b.typeid, t.name";
-        query += " ORDER BY t.name";
-        break;
-      case "tags":
-        query += " GROUP BY b.tagid, tg.name";
-        query += " ORDER BY tg.name";
-        break;
-      default:
-        return res.status(400).send(`Invalid "by" parameter: ${by}`);
     }
   }
 
@@ -148,7 +122,37 @@ export const bins = async (req, res) => {
     // Execute the query
     db = await dbPools.pool.getConnection();
     const data = await db.query(query, params);
-    console.log(data);
+    console.log(data.length);
+    // Add grouping if "by" is specified
+    if (by) {
+      switch (by) {
+        // case "contracts":
+        //   query += " GROUP BY b.contractid, c.name";
+        //   query += " ORDER BY c.name";
+        //   break;
+        // case "routes":
+        //   query += " GROUP BY b.routeid, r.name";
+        //   query += " ORDER BY r.name";
+        //   break;
+        case "types":
+          const groupedByType = data.reduce((acc, bin) => {
+            if (!acc[bin.typeid]) {
+              acc[bin.typeid] = [];
+            }
+            acc[bin.typeid].push(bin);
+            return acc;
+          }, {});
+
+          return res.status(200).json(groupedByType);
+        // case "tags":
+        //   query += " GROUP BY b.tagid, tg.name";
+        //   query += " ORDER BY tg.name";
+        //   break;
+        default:
+          return res.status(400).send(`Invalid "by" parameter: ${by}`);
+      }
+    }
+
     res.status(200).json(data);
   } catch (error) {
     console.error("Database query failed:", error);
