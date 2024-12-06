@@ -59,7 +59,8 @@ export const bins = async (req, res) => {
       c.name AS contract_name, 
       r.route_code AS route_name, 
       t.name AS type_name, 
-      tg.name AS tag_name
+      tg.name AS tag_name,
+      ${empted ? "h.fixtime as empted_time" : ""}
   `;
 
   // if (empted || from || to) {
