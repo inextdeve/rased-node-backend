@@ -78,10 +78,8 @@ export const bins = async (req, res) => {
 
   if (empted || from || to) {
     query += `
-      LEFT JOIN tcb_rfid_history h ON b.tagid = h.rfidtag
+      LEFT JOIN tcb_rfid_history h ON b.tagid = h.rfidtag  AND h.fixtime >= ? AND h.fixtime <= ?
     `;
-    // Add filtering for "from" and "to" since they are required with "empted"
-    query += " AND h.fixtime >= ? AND h.fixtime <= ?";
     params.push(from, to);
   }
 
