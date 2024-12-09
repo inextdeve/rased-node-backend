@@ -26,41 +26,45 @@ export const reportDevices = async (req, res) => {
   }
 
   //Get Max And Min ID
-  let minMaxId = {};
-  try {
-    db = await dbPools.pool.getConnection();
+  // let minMaxId = {};
 
-    const data = await db.query(`SELECT 
-    MIN(id) AS smallest_id,
-    MAX(id) AS greatest_id
-    FROM 
-        tc_positions
-    WHERE 
-    fixtime BETWEEN '${from}' AND '${to}'`);
+  let minMaxId = {
+    smallest_id: 13645190,
+    greatest_id: 13922881,
+  };
 
-    res.json(data);
-  } catch (error) {
-    console.log(error);
-  }
-  return;
+  // try {
+  //   db = await dbPools.pool.getConnection();
+
+  //   const data = await db.query(`SELECT
+  //   MIN(id) AS smallest_id,
+  //   MAX(id) AS greatest_id
+  //   FROM
+  //       tc_positions
+  //   WHERE
+  //   fixtime BETWEEN '${from}' AND '${to}'`);
+
+  //   minMaxId = data[0];
+  // } catch (error) {
+  //   console.log(error);
+  // }
+
   // Prepare the basic SQL query structure
   let query = `
     SELECT 
-      p.deviceid,
-      COUNT(*) AS total_positions,
-      AVG(p.speed) AS avg_speed,
-      MIN(p.fixtime) AS first_position_time,
-      MAX(p.fixtime) AS last_position_time
+      p.deviceid
+      
     FROM tc_positions p
   `;
   let conditions = [];
 
   // Add time filter
-  conditions.push(`p.fixtime BETWEEN ? AND ?`);
+  conditions.push(`p.id BETWEEN ? AND ?`);
 
   // Add groupId filter if provided (allow for multiple groupId values)
   if (groupId) {
     const groupIds = Array.isArray(groupId) ? groupId : [groupId]; // If groupId is an array, use it, otherwise make it an array
+    console.log("Groups", groupIds);
     const groupConditions = groupIds
       .map(
         (id) =>
@@ -94,10 +98,10 @@ export const reportDevices = async (req, res) => {
     query += " WHERE " + conditions.join(" AND ");
   }
 
-  query += " GROUP BY p.deviceid";
+  query += " LIMIT 20";
 
   // Prepare parameters for query execution
-  const params = [from, to]; // 'from' and 'to' are always added first
+  const params = [minMaxId.smallest_id, minMaxId.greatest_id]; // 'from' and 'to' are always added first
 
   // Add groupId params (if provided as an array)
   if (groupId) {
