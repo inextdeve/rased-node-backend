@@ -13,6 +13,117 @@ const NearbyStopsBodySchema = z.object({
   to: date().optional(),
 });
 
+export const reportDevices = async (req, res) => {
+  let db;
+  // Extract parameters from the query string
+  const { from, to, groupId, deviceId, ignition, geofences } = req.query;
+
+  // Check if both 'from' and 'to' are provided
+  if (!from || !to) {
+    return res
+      .status(400)
+      .json({ error: "'from' and 'to' parameters are required." });
+  }
+
+  //Get Max And Min ID
+  let minMaxId = {};
+  try {
+    db = await dbPools.pool.getConnection();
+
+    const data = await db.query(`SELECT 
+    MIN(id) AS smallest_id,
+    MAX(id) AS greatest_id
+    FROM 
+        tc_positions
+    WHERE 
+    fixtime BETWEEN '${from}' AND '${to}'`);
+
+    res.json(data);
+  } catch (error) {
+    console.log(error);
+  }
+  return;
+  // Prepare the basic SQL query structure
+  let query = `
+    SELECT 
+      p.deviceid,
+      COUNT(*) AS total_positions,
+      AVG(p.speed) AS avg_speed,
+      MIN(p.fixtime) AS first_position_time,
+      MAX(p.fixtime) AS last_position_time
+    FROM tc_positions p
+  `;
+  let conditions = [];
+
+  // Add time filter
+  conditions.push(`p.fixtime BETWEEN ? AND ?`);
+
+  // Add groupId filter if provided (allow for multiple groupId values)
+  if (groupId) {
+    const groupIds = Array.isArray(groupId) ? groupId : [groupId]; // If groupId is an array, use it, otherwise make it an array
+    const groupConditions = groupIds
+      .map(
+        (id) =>
+          `p.deviceid IN (SELECT deviceid FROM tc_devices WHERE groupid = ?)`
+      )
+      .join(" OR ");
+    conditions.push(`(${groupConditions})`);
+  }
+
+  // Add deviceId filter if provided (allow for multiple deviceId values)
+  if (deviceId) {
+    const deviceIds = Array.isArray(deviceId) ? deviceId : [deviceId];
+    const deviceCondition = deviceIds.map(() => `p.deviceid = ?`).join(" OR ");
+    conditions.push(`(${deviceCondition})`);
+  }
+
+  // Add ignition filter if provided
+  if (ignition) {
+    conditions.push(`p.attributes LIKE '%"ignition":true%'`);
+  }
+
+  // Add geofences filter if provided
+  if (geofences) {
+    conditions.push(
+      `p.deviceid IN (SELECT deviceid FROM tc_positions WHERE geofence_id IS NOT NULL)`
+    );
+  }
+
+  // Apply conditions to the query
+  if (conditions.length > 0) {
+    query += " WHERE " + conditions.join(" AND ");
+  }
+
+  query += " GROUP BY p.deviceid";
+
+  // Prepare parameters for query execution
+  const params = [from, to]; // 'from' and 'to' are always added first
+
+  // Add groupId params (if provided as an array)
+  if (groupId) {
+    const groupIds = Array.isArray(groupId) ? groupId : [groupId];
+    groupIds.forEach((id) => params.push(id));
+  }
+
+  // Add deviceId params (if provided as an array)
+  if (deviceId) {
+    const deviceIds = Array.isArray(deviceId) ? deviceId : [deviceId];
+    deviceIds.forEach(() => params.push("")); // Just pushing placeholders for deviceId
+  }
+
+  db = await dbPools.pool.getConnection();
+
+  // Execute the query and return the results
+  db.query(query, params, (error, results) => {
+    if (error) {
+      console.error("Error executing query", error);
+      res.status(500).json({ error: "Internal Server Error" });
+    } else {
+      res.json(results);
+    }
+  });
+};
+
 const summary = async (req, res) => {
   let db;
   const query = req.query;
