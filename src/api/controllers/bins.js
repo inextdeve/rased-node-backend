@@ -60,7 +60,7 @@ export const bins = async (req, res) => {
       r.route_code AS route_name, 
       t.name AS type_name, 
       tg.name AS tag_name
-      ${empted ? ", h.fixtime as empted_time" : ""}
+      ${empted ? ", h.fixtime as empted_time, h.deviceid" : ""}
   `;
 
   // if (empted || from || to) {
