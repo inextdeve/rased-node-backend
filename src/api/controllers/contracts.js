@@ -28,16 +28,27 @@ export const getContract = async (req, res) => {
   //Check if the user request just a related element to contract like if he want just the company related to it
   try {
     if (reqQuery?.get) {
-      switch (reqQuery.get) {
-        case "company":
-          query = `SELECT DISTINCT tcn_companies.* FROM tcn_companies JOIN tcn_contracts ON tcn_contracts.companyid = tcn_companies.id WHERE tcn_contracts.id=${id}`;
+      if (reqQuery.get === "company") {
+        query = `SELECT DISTINCT tcn_companies.* FROM tcn_companies JOIN tcn_contracts ON tcn_contracts.companyid = tcn_companies.id WHERE tcn_contracts.id=${id}`;
 
-          db = await dbPools.pool.getConnection();
-          const data = await db.query(query);
-          return res.json(data[0]);
+        db = await dbPools.pool.getConnection();
+        const data = await db.query(query);
+        return res.json(data[0]);
+      }
 
-        default:
-          break;
+      if (reqQuery.get === "devices") {
+        query = `SELECT 
+                      d.name,d.id
+                  FROM 
+                      tcn_device_contract dc
+                  JOIN 
+                      tc_devices d ON dc.deviceid = d.id
+                  WHERE 
+                      dc.contractid = ?;`;
+
+        db = await dbPools.pool.getConnection();
+        const data = await db.query(query, [id]);
+        return res.json(data);
       }
     }
 
@@ -61,12 +72,37 @@ export const putContract = async (req, res) => {
   const body = req.body;
   const id = req.params.id;
 
+  let query;
+
   const updateValues = fitUpdateValues(body, ["id", "userid", "company_name"]);
 
-  const query = `UPDATE tcn_contracts SET ${updateValues} WHERE tcn_contracts.id=?`;
-  console.log(query);
+  query = `UPDATE tcn_contracts SET ${updateValues} WHERE tcn_contracts.id=?`;
+
   try {
     db = await dbPools.pool.getConnection();
+
+    if (Array.isArray(body.devices)) {
+      console.log("SU");
+      // Delete existing links for these devices
+      const deleteQuery = `
+    DELETE FROM tcn_device_contract
+    WHERE contractid = ?;
+  `;
+      await db.query(deleteQuery, [id]);
+
+      // Prepare bulk insert values
+      const values = body.devices.map((deviceId) => [Number(id), deviceId]);
+
+      // Insert new links
+      const insertQuery = `
+    INSERT INTO tcn_device_contract (contractid, deviceid)
+    VALUES (?, ?);
+  `;
+
+      await db.batch(insertQuery, values);
+      return res.status(200).send("OK");
+    }
+
     await db.query(query, [id]);
     return res.status(200).end();
   } catch (error) {
