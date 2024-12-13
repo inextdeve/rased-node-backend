@@ -13,6 +13,7 @@ import companiesRouter from "./companies.js";
 import contractsRouter from "./contracts.js";
 import connectionsRouter from "./connections.js";
 import contractorsRouter from "./contractors.js";
+import sweepingRouter from "./sweeping.js";
 // import eventsRouter from "./events.js";
 
 import auth from "../middlewares/auth.js";
@@ -27,7 +28,7 @@ router.use(auth);
 //     ).toISOString();
 //   next();
 // });
-
+router.use("/sweeping", sweepingRouter);
 router.use("/bins", binsRouter);
 router.use("/washing", washingRouter);
 router.use("/devices", devicesRouter);
