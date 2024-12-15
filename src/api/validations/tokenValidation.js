@@ -11,7 +11,7 @@ const tokenValidation = async (token, fn) => {
   if (tokenCache) {
     return fn(true, tokenCache, null);
   } else {
-    const dbQuery = `SELECT id FROM tc_users WHERE attributes LIKE '%"apitoken":"${token}"%'`;
+    const dbQuery = `SELECT id, administrator FROM tc_users WHERE attributes LIKE '%"apitoken":"${token}"%'`;
 
     try {
       db = await dbPools.pool.getConnection();
@@ -19,7 +19,7 @@ const tokenValidation = async (token, fn) => {
 
       if (checkExistUser.length) {
         memoryCache.put(`__TOKEN__${token}`, checkExistUser[0].id, 120000);
-        return fn(true, checkExistUser[0].id, null);
+        return fn(true, checkExistUser[0], null);
       } else {
         throw new Error("Invalid Token");
       }

@@ -3,20 +3,37 @@ import { fitUpdateValues } from "../helpers/utils.js";
 
 export const companies = async (req, res) => {
   let db;
-  const { contractorid } = req.query;
+  let { contractorId, userId } = req.query;
 
-  let query = `SELECT tcn_companies.*,
-                 COUNT(tcn_contracts.id) AS contracts
-                 FROM tcn_companies
-                 LEFT JOIN tcn_contracts  ON tcn_companies.id = tcn_contracts.companyid
-                 WHERE tcn_companies.userid = ?`;
+  // For avoid getting companies of another user if not an admin
+  if (!req.isAdministrator && userId !== req.userId) {
+    userId = req.userId;
+  }
 
-  const params = [req.userId];
+  let params = [];
+  let conditions = [];
 
-  // Add filters dynamically
-  if (contractorid) {
-    query += " AND tcn_companies.contractorid = ?";
-    params.push(contractorid);
+  let query = `SELECT tcn_companies.*, COUNT(tcn_contracts.id) AS contracts FROM tcn_companies
+               LEFT JOIN tcn_contracts  ON tcn_companies.id = tcn_contracts.companyid `;
+
+  // Table Joining
+  if (userId) {
+    query += `LEFT JOIN tcn_user_company ON tcn_user_company.companyid = tcn_companies.id `;
+  }
+
+  // Conditions
+  if (userId) {
+    conditions.push(`tcn_user_company.userid = ?`);
+    params.push(userId);
+  }
+
+  if (contractorId) {
+    conditions.push(`tcn_companies.contractorid = ?`);
+    params.push(contractorId);
+  }
+
+  if (conditions.length) {
+    query += "WHERE " + conditions.join(" AND ");
   }
 
   query += " GROUP BY tcn_companies.id";

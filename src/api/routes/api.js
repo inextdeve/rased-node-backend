@@ -14,6 +14,7 @@ import contractsRouter from "./contracts.js";
 import connectionsRouter from "./connections.js";
 import contractorsRouter from "./contractors.js";
 import sweepingRouter from "./sweeping.js";
+import permissionsRouter from "./permissions.js";
 // import eventsRouter from "./events.js";
 
 import auth from "../middlewares/auth.js";
@@ -43,6 +44,7 @@ router.use("/companies", companiesRouter);
 router.use("/contracts", contractsRouter);
 router.use("/connections", connectionsRouter);
 router.use("/contractors", contractorsRouter);
+router.use("/permissions", permissionsRouter);
 // router.use("/events", eventsRouter);
 
 export default router;

@@ -35,6 +35,13 @@ export const bins = async (req, res) => {
   const { contractid, routeid, typeid, tagid, by, empted, from, to } =
     req.query;
 
+  let { userId } = req.query;
+
+  // For avoid getting bins of another user if not an admin
+  if (!req.isAdministrator && userId !== req.userId) {
+    userId = req.userId;
+  }
+
   // Validation for required parameters
   if (empted) {
     if (!from || !to) {
@@ -77,6 +84,11 @@ export const bins = async (req, res) => {
     LEFT JOIN tcn_tags tg ON b.tagid = tg.id
   `;
 
+  if (userId) {
+    query += `LEFT JOIN tcn_contracts ON b.contractid = tcn_contracts.id
+              LEFT JOIN tcn_user_contract ON tcn_contracts.id = tcn_user_contract.contractid`;
+  }
+
   if (empted || from || to) {
     query += `
       LEFT JOIN tcb_rfid_history h ON tg.tag_code = JSON_EXTRACT(h.attributes, "$.RFIDs") AND h.fixtime >= ? AND h.fixtime <= ?
@@ -104,6 +116,11 @@ export const bins = async (req, res) => {
   if (tagid) {
     query += " AND b.tagid = ?";
     params.push(tagid);
+  }
+
+  if (userId) {
+    query += " AND tcn_user_contract.userid = ?";
+    params.push(userId);
   }
 
   // Add filtering for "empted"

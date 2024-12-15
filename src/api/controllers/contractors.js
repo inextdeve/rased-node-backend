@@ -4,25 +4,49 @@ import { fitUpdateValues } from "../helpers/utils.js";
 export const contractors = async (req, res) => {
   let db;
 
-  let query = `SELECT tcn_contractors.*,
-                 COUNT(tcn_companies.id) AS companies
-                 FROM tcn_contractors
-                 LEFT JOIN tcn_companies  ON tcn_contractors.id = tcn_companies.contractorid
-                 WHERE tcn_contractors.userid = ${req.userId}
-                 GROUP BY tcn_contractors.id`;
+  const { userId } = req.query;
+  let query = "";
+  let params = [];
+  let conditions = [];
+
+  query = `SELECT tcn_contractors.*, COUNT(tcn_companies.id) AS companies FROM tcn_contractors
+                 LEFT JOIN tcn_companies ON tcn_contractors.id = tcn_companies.contractorid`;
+
+  // For avoid getting contracts of another user if not an admin
+  if (!req.isAdministrator && userId !== req.userId) {
+    userId = req.userId;
+  }
+
+  // Joining Tables
+  if (userId) {
+    query += `LEFT JOIN tcn_user_contractor ON tcn_user_contractor.contractorid = tcn_contractors.id`;
+  }
+
+  // Conditions
+  if (userId) {
+    conditions.push("tcn_user_contractor.userid = ?");
+    params.push(userId);
+  }
+
+  if (conditions.length) {
+    query += "WHERE " + conditions.join(" AND ");
+  }
 
   try {
     db = await dbPools.pool.getConnection();
-    let data = await db.query(query);
+
+    let data = await db.query(query, params);
+    //Try to remove this cause not compatible
     if (data.length > 0) {
       data = data.map((contractor) => ({
         ...contractor,
-        companies: parseInt(contractor.companies),
+        companies: parseInt(contractor?.companies || 0),
       }));
     }
 
     return res.json(data);
   } catch (error) {
+    console.log(error);
     return res.status(400).send("Server error");
   }
 };

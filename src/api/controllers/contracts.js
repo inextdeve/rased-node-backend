@@ -4,14 +4,47 @@ import { fitUpdateValues } from "../helpers/utils.js";
 export const contracts = async (req, res) => {
   let db;
 
-  const query = "SELECT * FROM tcn_contracts WHERE userid=?";
+  let { userId, companyId } = req.query;
+
+  let params = [];
+
+  let conditions = [];
+
+  let query = "SELECT tcn_contracts.* FROM tcn_contracts ";
+
+  // For avoid getting contracts of another user if not an admin
+  if (!req.isAdministrator && userId !== req.userId) {
+    userId = req.userId;
+  }
+
+  // Join Tables
+  if (userId) {
+    query += `LEFT JOIN tcn_user_contract ON tcn_user_contract.contractid = tcn_contracts.id `;
+  }
+
+  // Conditions
+  if (userId) {
+    conditions.push("tcn_user_contract.userid = ? ");
+    params.push(userId);
+  }
+
+  if (companyId) {
+    conditions.push("tcn_contracts.companyid = ? ");
+    params.push(companyId);
+  }
+
+  if (conditions.length) {
+    query += "WHERE " + conditions.join(" AND ");
+  }
 
   try {
     db = await dbPools.pool.getConnection();
-    const data = await db.query(query, [req.userId]);
+    console.log("QUERY: ", query);
+    const data = await db.query(query, params);
     return res.json(data);
   } catch (error) {
-    return res.status(404).end("Server error");
+    console.log(error);
+    return res.status(404).end("Cannot fetch contracts");
   }
 };
 

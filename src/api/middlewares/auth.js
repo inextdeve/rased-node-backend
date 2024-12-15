@@ -14,7 +14,8 @@ const auth = (req, res, next) => {
   }
   tokenValidation(token, (valid, user, error) => {
     if (valid) {
-      req.userId = user;
+      req.userId = user.id;
+      req.isAdministrator = user.administrator;
       next();
     } else {
       res.status(498).json(error);
