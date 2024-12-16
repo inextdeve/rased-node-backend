@@ -138,7 +138,6 @@ export const bins = async (req, res) => {
     // Execute the query
     db = await dbPools.pool.getConnection();
     const data = await db.query(query, params);
-    console.log(data.length);
     // Add grouping if "by" is specified
     if (by) {
       switch (by) {

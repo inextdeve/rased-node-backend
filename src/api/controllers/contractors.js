@@ -4,13 +4,13 @@ import { fitUpdateValues } from "../helpers/utils.js";
 export const contractors = async (req, res) => {
   let db;
 
-  const { userId } = req.query;
+  let { userId } = req.query;
   let query = "";
   let params = [];
   let conditions = [];
 
   query = `SELECT tcn_contractors.*, COUNT(tcn_companies.id) AS companies FROM tcn_contractors
-                 LEFT JOIN tcn_companies ON tcn_contractors.id = tcn_companies.contractorid`;
+                 LEFT JOIN tcn_companies ON tcn_contractors.id = tcn_companies.contractorid `;
 
   // For avoid getting contracts of another user if not an admin
   if (!req.isAdministrator && userId !== req.userId) {
@@ -29,10 +29,13 @@ export const contractors = async (req, res) => {
   }
 
   if (conditions.length) {
-    query += "WHERE " + conditions.join(" AND ");
+    query += " WHERE " + conditions.join(" AND ");
   }
 
+  query += "GROUP BY tcn_contractors.id";
+
   try {
+    console.log("GET_CONTRACTORS");
     db = await dbPools.pool.getConnection();
 
     let data = await db.query(query, params);

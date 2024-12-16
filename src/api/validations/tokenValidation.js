@@ -15,10 +15,11 @@ const tokenValidation = async (token, fn) => {
 
     try {
       db = await dbPools.pool.getConnection();
+
       const checkExistUser = await db.query(dbQuery);
 
       if (checkExistUser.length) {
-        memoryCache.put(`__TOKEN__${token}`, checkExistUser[0].id, 120000);
+        memoryCache.put(`__TOKEN__${token}`, checkExistUser[0], 120000);
         return fn(true, checkExistUser[0], null);
       } else {
         throw new Error("Invalid Token");
