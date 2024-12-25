@@ -10,7 +10,7 @@ export const types = async (_, res) => {
     const dbQuery = await db.query(query);
     return res.json(dbQuery);
   } catch (error) {
-    return res.status(400).end();
+    return res.status(400).send("Error");
   } finally {
     if (db) {
       await db.release();
