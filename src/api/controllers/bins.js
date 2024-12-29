@@ -32,8 +32,18 @@ import { fitUpdateValues } from "../helpers/utils.js";
 export const bins = async (req, res) => {
   let db;
   const params = [];
-  const { contractid, routeid, typeid, tagid, by, empted, from, to } =
-    req.query;
+  const {
+    contractid,
+    routeid,
+    typeid,
+    tagid,
+    binId,
+    by,
+    empted,
+    from,
+    to,
+    groupId,
+  } = req.query;
 
   let { userId } = req.query;
 
@@ -66,8 +76,14 @@ export const bins = async (req, res) => {
       c.name AS contract_name, 
       r.route_code AS route_name, 
       t.name AS type_name, 
-      tg.name AS tag_name
-      ${empted ? ", h.fixtime as empted_time, h.deviceid" : ""}
+      tg.name AS tag_name,
+      ctr.id AS centerid,
+      ctr.name AS center_name
+      ${
+        empted
+          ? ", h.fixtime as empted_time, h.deviceid, dv.name AS device_name"
+          : ""
+      }
   `;
 
   // if (empted || from || to) {
@@ -82,6 +98,7 @@ export const bins = async (req, res) => {
     LEFT JOIN tcn_routes r ON b.routeid = r.id
     LEFT JOIN tcn_binstypes t ON b.typeid = t.id
     LEFT JOIN tcn_tags tg ON b.tagid = tg.id
+    LEFT JOIN tcn_centers ctr ON r.center_id = ctr.id
   `;
 
   if (userId) {
@@ -92,6 +109,7 @@ export const bins = async (req, res) => {
   if (empted || from || to) {
     query += `
       LEFT JOIN tcb_rfid_history h ON tg.tag_code = JSON_EXTRACT(h.attributes, "$.RFIDs") AND h.fixtime >= ? AND h.fixtime <= ?
+      LEFT JOIN tc_devices dv ON h.deviceid = dv.id
     `;
     params.push(from, to);
   }
@@ -121,6 +139,21 @@ export const bins = async (req, res) => {
   if (userId) {
     query += " AND tcn_user_contract.userid = ?";
     params.push(userId);
+  }
+
+  if (binId) {
+    query += " AND b.id = ?";
+    params.push(binId);
+  }
+
+  if (groupId && empted) {
+    if (Array.isArray(groupId)) {
+      query += ` AND dv.groupid IN (?)`;
+      params.push(groupId);
+    } else {
+      query += ` AND dv.groupid = ?`;
+      params.push(groupId);
+    }
   }
 
   // Add filtering for "empted"
