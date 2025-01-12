@@ -33,7 +33,9 @@ export const bins = async (req, res) => {
   let db;
   const params = [];
   const {
-    contractid,
+    contractId,
+    contractorId,
+    companyId,
     routeid,
     typeid,
     tagid,
@@ -101,6 +103,15 @@ export const bins = async (req, res) => {
     LEFT JOIN tcn_centers ctr ON r.center_id = ctr.id
   `;
 
+  if (companyId && !contractId) {
+    query += ` LEFT JOIN tcn_companies ON c.companyid = tcn_companies.id`;
+  }
+
+  if (contractorId && !companyId && !contractId) {
+    query += ` LEFT JOIN tcn_companies ON c.companyid = tcn_companies.id
+              LEFT JOIN tcn_contractors ON tcn_companies.contractorid = tcn_contractors.id`;
+  }
+
   if (userId) {
     query += `LEFT JOIN tcn_contracts ON b.contractid = tcn_contracts.id
               LEFT JOIN tcn_user_contract ON tcn_contracts.id = tcn_user_contract.contractid`;
@@ -119,10 +130,21 @@ export const bins = async (req, res) => {
   `;
 
   // Add filtering conditions based on the query parameters
-  if (contractid) {
+  if (contractId) {
     query += " AND b.contractid = ?";
-    params.push(contractid);
+    params.push(contractId);
   }
+
+  if (companyId && !contractId) {
+    query += " AND tcn_companies.id = ?";
+    params.push(companyId);
+  }
+
+  if (contractorId && !companyId && !contractId) {
+    query += " AND tcn_contractors.id = ?";
+    params.push(contractorId);
+  }
+
   if (routeid) {
     query += " AND b.routeid = ?";
     params.push(routeid);
