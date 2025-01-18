@@ -3,32 +3,6 @@ import dbPools from "../db/config/index.js";
 import { LAST7DAYS, LASTWEEK } from "../helpers/constants.js";
 import { fitUpdateValues } from "../helpers/utils.js";
 
-// const bins = async (req, res) => {
-//   let db;
-
-//   const reqQuery = req.query;
-
-//   let query = "SELECT * FROM tcn_bins WHERE userid=?";
-
-//   if (reqQuery?.contractid) {
-//     query += " AND contractid=" + req.query.contractid;
-//   }
-
-//   try {
-//     db = await dbPools.pool.getConnection();
-//     const data = await db.query(query, [req.userId]);
-//     console.log("Data", data);
-//     return res.json(data);
-//   } catch (error) {
-//     console.log(error);
-//     return res.status(404).end("Server error");
-//   } finally {
-//     if (db) {
-//       await db.release();
-//     }
-//   }
-// };
-
 export const bins = async (req, res) => {
   let db;
   const params = [];
@@ -87,12 +61,6 @@ export const bins = async (req, res) => {
           : ""
       }
   `;
-
-  // if (empted || from || to) {
-  //   query += `,
-  //     COUNT(h.rfidtag) AS empted_count
-  //   `;
-  // }
 
   query += `
     FROM tcn_bins b
@@ -227,6 +195,10 @@ export const bins = async (req, res) => {
   } catch (error) {
     console.error("Database query failed:", error);
     res.status(500).send("An error occurred while fetching bins");
+  } finally {
+    if (db) {
+      await db.release();
+    }
   }
 };
 

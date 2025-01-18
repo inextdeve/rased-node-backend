@@ -10,6 +10,6 @@ export default Object.freeze({
     user: process.env.DB_USER,
     password: process.env.DB_PASS,
     database: "rased-track",
-    connectionLimit: 100,
+    connectionLimit: 250,
   }),
 });

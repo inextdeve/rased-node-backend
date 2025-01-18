@@ -51,6 +51,10 @@ export const companies = async (req, res) => {
     return res.json(data);
   } catch (error) {
     return res.status(404).end("Server error");
+  } finally {
+    if (db) {
+      await db.release();
+    }
   }
 };
 
@@ -82,6 +86,10 @@ export const getCompany = async (req, res) => {
     return data?.[0] ? res.json(data[0]) : res.status(404).send("Not Found");
   } catch (error) {
     return res.status(400).end("Server error");
+  } finally {
+    if (db) {
+      await db.release();
+    }
   }
 };
 
@@ -168,5 +176,9 @@ export const deleteCompany = async (req, res) => {
     return res.status(200).end();
   } catch (error) {
     return res.status(404).end("Server error");
+  } finally {
+    if (db) {
+      await db.release();
+    }
   }
 };
