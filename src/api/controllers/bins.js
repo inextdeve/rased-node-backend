@@ -43,6 +43,7 @@ export const bins = async (req, res) => {
     from,
     to,
     groupId,
+    deviceId,
   } = req.query;
 
   let { userId } = req.query;
@@ -81,7 +82,7 @@ export const bins = async (req, res) => {
       ctr.name AS center_name
       ${
         empted
-          ? ", h.fixtime as empted_time, h.deviceid, dv.name AS device_name"
+          ? ", h.fixtime as empted_time, h.deviceid, dv.name AS device_name, dv.category AS deviceCategory"
           : ""
       }
   `;
@@ -153,6 +154,16 @@ export const bins = async (req, res) => {
     } else {
       query += ` AND dv.groupid = ?`;
       params.push(groupId);
+    }
+  }
+
+  if (deviceId && empted) {
+    if (Array.isArray(deviceId)) {
+      query += ` AND dv.id IN (?)`;
+      params.push(deviceId);
+    } else {
+      query += ` AND dv.id = ?`;
+      params.push(deviceId);
     }
   }
 
