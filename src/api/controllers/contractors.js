@@ -51,6 +51,10 @@ export const contractors = async (req, res) => {
   } catch (error) {
     console.log(error);
     return res.status(400).send("Server error");
+  } finally {
+    if (db) {
+      await db.release();
+    }
   }
 };
 
@@ -65,6 +69,10 @@ export const getContractor = async (req, res) => {
     return res.json(data);
   } catch (error) {
     return res.status(404).send("Server error");
+  } finally {
+    if (db) {
+      await db.release();
+    }
   }
 };
 
@@ -150,5 +158,9 @@ export const deleteContractor = async (req, res) => {
     return res.status(200).end();
   } catch (error) {
     return res.status(404).end("Server error");
+  } finally {
+    if (db) {
+      await db.release();
+    }
   }
 };

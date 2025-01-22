@@ -3,37 +3,13 @@ import dbPools from "../db/config/index.js";
 import { LAST7DAYS, LASTWEEK } from "../helpers/constants.js";
 import { fitUpdateValues } from "../helpers/utils.js";
 
-// const bins = async (req, res) => {
-//   let db;
-
-//   const reqQuery = req.query;
-
-//   let query = "SELECT * FROM tcn_bins WHERE userid=?";
-
-//   if (reqQuery?.contractid) {
-//     query += " AND contractid=" + req.query.contractid;
-//   }
-
-//   try {
-//     db = await dbPools.pool.getConnection();
-//     const data = await db.query(query, [req.userId]);
-//     console.log("Data", data);
-//     return res.json(data);
-//   } catch (error) {
-//     console.log(error);
-//     return res.status(404).end("Server error");
-//   } finally {
-//     if (db) {
-//       await db.release();
-//     }
-//   }
-// };
-
 export const bins = async (req, res) => {
   let db;
   const params = [];
   const {
-    contractid,
+    contractId,
+    contractorId,
+    companyId,
     routeid,
     typeid,
     tagid,
@@ -87,12 +63,6 @@ export const bins = async (req, res) => {
       }
   `;
 
-  // if (empted || from || to) {
-  //   query += `,
-  //     COUNT(h.rfidtag) AS empted_count
-  //   `;
-  // }
-
   query += `
     FROM tcn_bins b
     LEFT JOIN tcn_contracts c ON b.contractid = c.id
@@ -101,6 +71,15 @@ export const bins = async (req, res) => {
     LEFT JOIN tcn_tags tg ON b.tagid = tg.id
     LEFT JOIN tcn_centers ctr ON r.center_id = ctr.id
   `;
+
+  if (companyId && !contractId) {
+    query += ` LEFT JOIN tcn_companies ON c.companyid = tcn_companies.id`;
+  }
+
+  if (contractorId && !companyId && !contractId) {
+    query += ` LEFT JOIN tcn_companies ON c.companyid = tcn_companies.id
+              LEFT JOIN tcn_contractors ON tcn_companies.contractorid = tcn_contractors.id`;
+  }
 
   if (userId) {
     query += `LEFT JOIN tcn_contracts ON b.contractid = tcn_contracts.id
@@ -120,10 +99,21 @@ export const bins = async (req, res) => {
   `;
 
   // Add filtering conditions based on the query parameters
-  if (contractid) {
+  if (contractId) {
     query += " AND b.contractid = ?";
-    params.push(contractid);
+    params.push(contractId);
   }
+
+  if (companyId && !contractId) {
+    query += " AND tcn_companies.id = ?";
+    params.push(companyId);
+  }
+
+  if (contractorId && !companyId && !contractId) {
+    query += " AND tcn_contractors.id = ?";
+    params.push(contractorId);
+  }
+
   if (routeid) {
     query += " AND b.routeid = ?";
     params.push(routeid);
@@ -216,6 +206,10 @@ export const bins = async (req, res) => {
   } catch (error) {
     console.error("Database query failed:", error);
     res.status(500).send("An error occurred while fetching bins");
+  } finally {
+    if (db) {
+      await db.release();
+    }
   }
 };
 

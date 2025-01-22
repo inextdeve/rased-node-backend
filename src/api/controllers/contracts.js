@@ -45,6 +45,10 @@ export const contracts = async (req, res) => {
   } catch (error) {
     console.log(error);
     return res.status(404).end("Cannot fetch contracts");
+  } finally {
+    if (db) {
+      await db.release();
+    }
   }
 };
 
@@ -190,5 +194,9 @@ export const deleteContract = async (req, res) => {
     return res.status(200).end();
   } catch (error) {
     return res.status(404).end("Server error");
+  } finally {
+    if (db) {
+      await db.release();
+    }
   }
 };

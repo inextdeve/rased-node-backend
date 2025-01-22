@@ -18,6 +18,9 @@ export const getUser = async (req, res) => {
   } catch (error) {
     return res.status(400).end();
   } finally {
+    if (db) {
+      await db.release();
+    }
   }
 };
 
