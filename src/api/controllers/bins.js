@@ -88,7 +88,7 @@ export const bins = async (req, res) => {
 
   if (empted || from || to) {
     query += `
-      LEFT JOIN tcb_rfid_history h ON tg.tag_code = JSON_EXTRACT(h.attributes, "$.RFIDs") AND h.fixtime >= ? AND h.fixtime <= ?
+      LEFT JOIN tcb_rfid_history h ON tg.tag_code = h.rfidtag AND h.fixtime >= ? AND h.fixtime <= ?
       LEFT JOIN tc_devices dv ON h.deviceid = dv.id
     `;
     params.push(from, to);
