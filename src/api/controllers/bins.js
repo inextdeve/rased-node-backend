@@ -362,6 +362,7 @@ export const bins = async (req, res) => {
         return {
           ...bin,
           empted_time: binHistory.empted_time,
+          ...binHistory,
         };
       })
       .filter(Boolean);
