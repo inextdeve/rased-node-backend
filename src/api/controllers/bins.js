@@ -336,15 +336,14 @@ export const bins = async (req, res) => {
     if (!empted) {
       return res.json(binsData);
     }
-
     // Extract tag codes for querying tcb_rfid_history
-    const tagCodes = binsData.map((bin) => bin.tag_rfid).filter((tag) => tag); // Ensure tag_code exists
+    const tagCodes = binsData.map((bin) => bin.rfidtag).filter((tag) => tag); // Ensure tag_code exists
     let historyData = [];
 
     if (tagCodes.length > 0) {
       const historyParams = [from, to, ...tagCodes];
       const historyQuery = `
-        SELECT h.fixtime as empted_time, h.rfidtag, dv.id AS device_id, dv.category AS deviceCategory
+        SELECT h.fixtime as empted_time, h.rfidtag, h.deviceid, dv.category AS deviceCategory
         FROM tcb_rfid_history h
         LEFT JOIN tc_devices dv ON h.deviceid = dv.id
         WHERE h.fixtime >= ? AND h.fixtime <= ?
@@ -365,7 +364,7 @@ export const bins = async (req, res) => {
           empted_time: binHistory.empted_time,
         };
       })
-      .filter((bin) => Boolean(bin));
+      .filter(Boolean);
 
     // Grouping logic (if "by" is specified)
     if (by) {
