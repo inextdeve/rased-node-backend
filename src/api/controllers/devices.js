@@ -13,6 +13,54 @@ const NearbyStopsBodySchema = z.object({
   to: date().optional(),
 });
 
+const devices = async (req, res) => {
+  let db;
+  const params = [];
+
+  const { contractId, contractorId, companyId } = req.query;
+
+  let query = `SELECT tc_devices.* FROM tc_devices`;
+
+  query += " LEFT JOIN tcn_device_contract dc ON tc_devices.id = dc.deviceid";
+
+  if (companyId && !contractId) {
+    query += ` LEFT JOIN tcn_contracts ON dc.contractid = tcn_contracts.id`;
+  }
+
+  if (contractorId && !companyId && !contractId) {
+    query += ` LEFT JOIN tcn_contracts ON dc.contractid = tcn_contracts.id
+              LEFT JOIN tcn_companies ON tcn_companies.id = tcn_contracts.companyid`;
+  }
+
+  query += `
+  WHERE 1=1
+`;
+
+  // Add filtering conditions based on the query parameters
+  if (contractId) {
+    query += " AND dc.contractid = ?";
+    params.push(contractId);
+  }
+
+  if (companyId && !contractId) {
+    query += " AND tcn_contracts.companyid = ?";
+    params.push(companyId);
+  }
+
+  if (contractorId && !companyId && !contractId) {
+    query += " AND tcn_companies.contractorid = ?";
+    params.push(contractorId);
+  }
+
+  try {
+    db = await dbPools.pool.getConnection();
+    const data = await db.query(query, params);
+    res.json(data);
+  } catch (error) {
+    console.log(error);
+  }
+};
+
 export const reportDevices = async (req, res) => {
   let db;
   // Extract parameters from the query string
@@ -240,4 +288,4 @@ const nearbyStops = async (req, res) => {
 //   }
 // };
 
-export { summary, nearbyStops };
+export { summary, nearbyStops, devices };

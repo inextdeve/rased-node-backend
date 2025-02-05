@@ -1,8 +1,14 @@
 import express from "express";
-import { summary, nearbyStops, reportDevices } from "../controllers/devices.js";
+import {
+  summary,
+  nearbyStops,
+  reportDevices,
+  devices,
+} from "../controllers/devices.js";
 
 const router = express.Router();
 
+router.get("/", devices);
 router.get("/summary", summary);
 
 router.get("/nearby-stops", nearbyStops);
