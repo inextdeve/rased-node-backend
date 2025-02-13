@@ -11,5 +11,6 @@ export default Object.freeze({
     password: process.env.DB_PASS,
     database: process.env.DB_NAME,
     connectionLimit: 250,
+    queueLimit: 0,
   }),
 });
