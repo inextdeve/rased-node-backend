@@ -40,10 +40,10 @@ export const tags = async (req, res) => {
 
   if (get === "all") {
     query = "SELECT * FROM tcn_tags WHERE userid=?";
-  } else if (count) {
-    query = "SELECT COUNT(id) FROM tcn_tags WHERE userid=?";
   } else {
-    query = "SELECT tcn_tags.* FROM tcn_tags ";
+    query = `SELECT ${
+      count ? "COUNT(tcn_tags.id) AS COUNT" : "tcn_tags.*"
+    } FROM tcn_tags `;
 
     if (contractId) {
       query += ` LEFT JOIN tcn_bins ON tcn_tags.binid = tcn_bins.id
@@ -101,7 +101,7 @@ export const tags = async (req, res) => {
     db = await dbPools.pool.getConnection();
     const tags = await db.query(query, params);
 
-    if (count) return res.json(parseInt(tags[0]["COUNT(id)"]));
+    if (count) return res.json(parseInt(tags[0]["COUNT"]));
 
     return res.json(tags);
   } catch (error) {
