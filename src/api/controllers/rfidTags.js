@@ -7,12 +7,105 @@ import {
 
 export const tags = async (req, res) => {
   let db;
-  const query = "SELECT * FROM tcn_tags WHERE userid=?";
+  const {
+    cursor,
+    limit,
+    get,
+    count,
+    contractorId,
+    companyId,
+    contractId,
+    scanned,
+    from,
+    to,
+  } = req.query;
+  let query;
+  let params = [req.userId];
+
+  if (scanned) {
+    if (!from || !to) {
+      return res
+        .status(400)
+        .send(
+          `Both "from" and "to" parameters are required when "scanned" is specified.`
+        );
+    }
+  } else if (from || to) {
+    return res
+      .status(400)
+      .send(
+        `"from" and "to" parameters can only be used with the "scanned" query.`
+      );
+  }
+
+  if (get === "all") {
+    query = "SELECT * FROM tcn_tags WHERE userid=?";
+  } else if (count) {
+    query = "SELECT COUNT(id) FROM tcn_tags WHERE userid=?";
+  } else {
+    query = "SELECT tcn_tags.* FROM tcn_tags ";
+
+    if (contractId) {
+      query += ` LEFT JOIN tcn_bins ON tcn_tags.binid = tcn_bins.id
+                  LEFT JOIN tcn_contracts ON tcn_bins.contractid = tcn_contracts.id`;
+    }
+
+    if (companyId && !contractId) {
+      query += ` 
+      LEFT JOIN tcn_bins ON tcn_tags.binid = tcn_bins.id
+      LEFT JOIN tcn_contracts ON tcn_bins.contractid = tcn_contracts.id
+      LEFT JOIN tcn_companies ON tcn_contracts.companyid = tcn_companies.id`;
+    }
+
+    if (contractorId && !companyId && !contractId) {
+      query += ` LEFT JOIN tcn_bins ON tcn_tags.binid = tcn_bins.id
+                LEFT JOIN tcn_contracts ON tcn_bins.contractid = tcn_contracts.id
+                LEFT JOIN tcn_companies ON tcn_contracts.companyid = tcn_companies.id
+                LEFT JOIN tcn_contractors ON tcn_companies.contractorid = tcn_contractors.id`;
+    }
+
+    if (scanned) {
+      query +=
+        " LEFT JOIN tcb_rfid_history ON tcb_rfid_history.tagid = tcn_tags.id";
+    }
+
+    query += " WHERE tcn_tags.userid=?";
+
+    if (contractId) {
+      query += " AND tcn_bins.contractid = ?";
+      params.push(contractId);
+    }
+
+    if (companyId && !contractId) {
+      query += " AND tcn_companies.id = ?";
+      params.push(companyId);
+    }
+
+    if (contractorId && !companyId && !contractId) {
+      query += " AND tcn_contractors.id = ?";
+      params.push(contractorId);
+    }
+
+    if (scanned) {
+      query += " AND tcb_rfid_history.fixtime BETWEEN ? AND ?";
+      params.push(from, to);
+    }
+
+    const limitValue = limit ? parseInt(limit) : 30;
+    const cursorValue = cursor ? parseInt(cursor) : 0;
+    query += " LIMIT ? OFFSET ?";
+    params.push(limitValue, cursorValue);
+  }
+
   try {
     db = await dbPools.pool.getConnection();
-    const tags = await db.query(query, [req.userId]);
+    const tags = await db.query(query, params);
+
+    if (count) return res.json(parseInt(tags[0]["COUNT(id)"]));
+
     return res.json(tags);
   } catch (error) {
+    console.log(error);
     return res.status(404).end("Server error");
   } finally {
     if (db) {
