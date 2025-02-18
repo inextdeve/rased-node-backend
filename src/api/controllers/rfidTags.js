@@ -37,36 +37,40 @@ export const tags = async (req, res) => {
         `"from" and "to" parameters can only be used with the "scanned" query.`
       );
   }
+  /* Set the selected row */
+  query = "SELECT tcn_tags.* FROM tcn_tags ";
+
+  if (count) {
+    query = "SELECT COUNT(tcn_tags.id) AS COUNT FROM tcn_tags ";
+  } else if (scanned) {
+    query =
+      "SELECT tcn_tags.*, tcb_rfid_history.fixtime, tc_devices.name AS deviceName FROM tcn_tags ";
+  }
+
+  /* ***************** */
 
   if (get === "all") {
     query = "SELECT * FROM tcn_tags WHERE userid=?";
   } else {
-    query = `SELECT ${
-      count ? "COUNT(tcn_tags.id) AS COUNT" : "tcn_tags.*"
-    } FROM tcn_tags `;
-
-    if (contractId) {
+    if (contractId || companyId || contractorId) {
       query += ` LEFT JOIN tcn_bins ON tcn_tags.binid = tcn_bins.id
                   LEFT JOIN tcn_contracts ON tcn_bins.contractid = tcn_contracts.id`;
     }
 
     if (companyId && !contractId) {
       query += ` 
-      LEFT JOIN tcn_bins ON tcn_tags.binid = tcn_bins.id
-      LEFT JOIN tcn_contracts ON tcn_bins.contractid = tcn_contracts.id
       LEFT JOIN tcn_companies ON tcn_contracts.companyid = tcn_companies.id`;
     }
 
     if (contractorId && !companyId && !contractId) {
-      query += ` LEFT JOIN tcn_bins ON tcn_tags.binid = tcn_bins.id
-                LEFT JOIN tcn_contracts ON tcn_bins.contractid = tcn_contracts.id
+      query += ` 
                 LEFT JOIN tcn_companies ON tcn_contracts.companyid = tcn_companies.id
                 LEFT JOIN tcn_contractors ON tcn_companies.contractorid = tcn_contractors.id`;
     }
 
     if (scanned) {
-      query +=
-        " LEFT JOIN tcb_rfid_history ON tcb_rfid_history.tagid = tcn_tags.id";
+      query += ` LEFT JOIN tcb_rfid_history ON tcb_rfid_history.tagid = tcn_tags.id
+          LEFT JOIN tc_devices ON tcb_rfid_history.deviceid = tc_devices.id`;
     }
 
     query += " WHERE tcn_tags.userid=?";
