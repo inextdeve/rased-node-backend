@@ -262,6 +262,7 @@ export const bins = async (req, res) => {
       r.route_code AS route_name, 
       t.name AS type_name,
       tg.tag_code AS rfidtag,
+      tg.name AS tagName,
       ctr.id AS centerid,
       ctr.name AS center_name
     FROM tcn_bins b
