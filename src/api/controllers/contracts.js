@@ -10,7 +10,9 @@ export const contracts = async (req, res) => {
 
   let conditions = [];
 
-  let query = "SELECT tcn_contracts.* FROM tcn_contracts ";
+  let query = `SELECT tcn_contracts.*, tcn_contractors.id AS contractorId FROM tcn_contracts 
+                LEFT JOIN tcn_companies ON tcn_contracts.companyid = tcn_companies.id
+                LEFT JOIN tcn_contractors on tcn_companies.contractorid = tcn_contractors.id `;
 
   // For avoid getting contracts of another user if not an admin
   if (!req.isAdministrator && userId !== req.userId) {
