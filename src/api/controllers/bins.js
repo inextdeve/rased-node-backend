@@ -328,7 +328,7 @@ export const bins = async (req, res) => {
     query += " AND b.id = ?";
     params.push(binId);
   }
-
+  query += " LIMIT 1000";
   try {
     // Execute the main query
     db = await dbPools.pool.getConnection();
@@ -343,13 +343,26 @@ export const bins = async (req, res) => {
 
     if (tagCodes.length > 0) {
       const historyParams = [from, to, ...tagCodes];
-      const historyQuery = `
+      let historyQuery = `
         SELECT h.fixtime as empted_time, h.rfidtag, h.deviceid, dv.category AS deviceCategory
         FROM tcb_rfid_history h
         LEFT JOIN tc_devices dv ON h.deviceid = dv.id
         WHERE h.fixtime >= ? AND h.fixtime <= ?
-        AND h.rfidtag IN (${tagCodes.map(() => "?").join(", ")});
+        AND h.rfidtag IN (${tagCodes.map(() => "?").join(", ")})
       `;
+
+      if (deviceId) {
+        if (Array.isArray(deviceId)) {
+          historyQuery += ` AND h.deviceid IN (${deviceId
+            .map(() => "?")
+            .join(", ")}) `;
+          historyParams.push(...deviceId);
+        } else {
+          historyQuery += " AND h.deviceid = ? ";
+          historyParams.push(deviceId);
+        }
+      }
+
       historyData = await db.query(historyQuery, historyParams);
     }
 
