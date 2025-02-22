@@ -328,7 +328,6 @@ export const bins = async (req, res) => {
     query += " AND b.id = ?";
     params.push(binId);
   }
-  query += " LIMIT 1000";
   try {
     // Execute the main query
     db = await dbPools.pool.getConnection();
