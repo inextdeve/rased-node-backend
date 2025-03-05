@@ -35,7 +35,6 @@ export const contractors = async (req, res) => {
   query += "GROUP BY tcn_contractors.id";
 
   try {
-    console.log("GET_CONTRACTORS");
     db = await dbPools.pool.getConnection();
 
     let data = await db.query(query, params);
@@ -49,7 +48,6 @@ export const contractors = async (req, res) => {
 
     return res.json(data);
   } catch (error) {
-    console.log(error);
     return res.status(400).send("Server error");
   } finally {
     if (db) {
