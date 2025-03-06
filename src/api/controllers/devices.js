@@ -53,6 +53,7 @@ const devices = async (req, res) => {
   }
 
   try {
+    console.log("QUERY", query);
     db = await dbPools.pool.getConnection();
     const data = await db.query(query, params);
     res.json(
