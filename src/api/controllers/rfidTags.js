@@ -97,8 +97,9 @@ export const tags = async (req, res) => {
       params.push(from, to);
     }
     if (q) {
-      query += " AND (tcn_tags.name LIKE ? OR tcn_bins.description LIKE ?)";
-      params.push(`%${q}%`, `%${q}%`);
+      query +=
+        " AND (tcn_tags.name LIKE ? OR tcn_bins.description LIKE ? OR tcn_tags.tag_code LIKE ?)";
+      params.push(`%${q}%`, `%${q}%`, `%${q}%`);
     }
     const limitValue = limit ? parseInt(limit) : 30;
     const cursorValue = cursor ? parseInt(cursor) : 0;
