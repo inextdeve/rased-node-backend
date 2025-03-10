@@ -7,6 +7,8 @@ export const Oldbins = async (req, res) => {
   let db;
   const params = [];
   const {
+    limit,
+    count,
     contractId,
     contractorId,
     companyId,
@@ -217,6 +219,10 @@ export const bins = async (req, res) => {
   let db;
   const params = [];
   const {
+    q,
+    count,
+    limit,
+    cursor,
     contractId,
     contractorId,
     companyId,
@@ -255,16 +261,21 @@ export const bins = async (req, res) => {
   }
 
   // Base query (excluding tcb_rfid_history)
+  // i use not empted for using the count just in bins query that not require empted bins
   let query = `
-    SELECT 
-      b.*, 
+    SELECT
+      ${
+        count && !empted
+          ? "COUNT(b.id) AS COUNT "
+          : `b.*, 
       c.name AS contract_name, 
       r.route_code AS route_name, 
       t.name AS type_name,
       tg.tag_code AS rfidtag,
       tg.name AS tagName,
       ctr.id AS centerid,
-      ctr.name AS center_name
+      ctr.name AS center_name`
+      }
     FROM tcn_bins b
     LEFT JOIN tcn_contracts c ON b.contractid = c.id
     LEFT JOIN tcn_routes r ON b.routeid = r.id
@@ -328,13 +339,23 @@ export const bins = async (req, res) => {
     query += " AND b.id = ?";
     params.push(binId);
   }
-  query += " LIMIT 100";
+
+  if (q) {
+    query += " AND b.description LIKE ?";
+    params.push(`%${q}%`);
+  }
+
+  const limitValue = limit ? parseInt(limit) : 30;
+  const cursorValue = cursor ? parseInt(cursor) : 0;
+  query += " LIMIT ? OFFSET ?";
+  params.push(limitValue, cursorValue);
   try {
     // Execute the main query
     db = await dbPools.pool.getConnection();
     const binsData = await db.query(query, params);
 
     if (!empted) {
+      if (count) return res.json(parseInt(binsData[0]["COUNT"]));
       return res.json(binsData);
     }
     // Extract tag codes for querying tcb_rfid_history
