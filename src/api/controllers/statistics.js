@@ -130,50 +130,104 @@ const kpi = async (req, res) => {
 const summary = async (req, res) => {
   let db;
 
-  const dbQueryReports = `SELECT 
-  COUNT(*) AS total_rows,
-  SUM(CASE WHEN status = 0 THEN 1 ELSE 0 END) AS Open,
-  SUM(CASE WHEN status = 1 THEN 1 ELSE 0 END) AS Closed
-  FROM tcn_g_reprots
-  WHERE time >= DATE_SUB(NOW(), INTERVAL 7 DAY)`;
+  const { from, to, userid, contractorid, companyid, contractid } = req.query;
 
-  const dbQuerySweepers = `SELECT AVG(speed) AS avg_speed, MAX(speed) AS max_speed, SUM(JSON_EXTRACT(attributes, '$.distance')/1000) AS total_distance, 826 * 7 AS total_routs, (SUM(JSON_EXTRACT(attributes, '$.distance')/1000)/(826 * 7))*100 AS rate_percentage
-  FROM tc_positions
-  WHERE deviceid IN (SELECT id FROM tc_devices WHERE groupid = 5)
-  AND speed < 15
-  AND fixtime >= DATE_SUB(NOW(), INTERVAL 7 DAY)`;
+  if (!from || !to || !userid)
+    return res
+      .status(400)
+      .send(`Required parameters "from", "to" and "userid".`);
+
+  const dbQuery = `
+    WITH dates AS (
+        SELECT DISTINCT DATE(history.fixtime) AS record_date
+        FROM tcb_rfid_history history
+        WHERE history.fixtime BETWEEN '${from}' AND '${to}'
+    ),
+    filtered_contracts AS (
+        SELECT contracts.id AS contract_id, contracts.name AS contract_name, contracts.companyid
+        FROM tcn_contracts contracts
+        JOIN tcn_user_contract uc ON contracts.id = uc.contractid
+        WHERE uc.userid = 1
+        AND (${contractid ? `contracts.id = ${contractid}` : "1=1 "})
+        AND (${companyid ? `contracts.companyid = ${companyid}` : "1=1"})
+    ), 
+    filtered_companies AS (
+        SELECT companies.id AS company_id, companies.name AS company_name, companies.contractorid
+        FROM tcn_companies companies
+        JOIN tcn_user_company uc ON companies.id = uc.companyid
+        WHERE uc.userid = 1
+        AND (${companyid ? `companies.id = ${companyid}` : "1=1"})
+    ), 
+    filtered_contractors AS (
+        SELECT contractors.id AS contractor_id, contractors.name AS contractor_name
+        FROM tcn_contractors contractors
+        JOIN tcn_user_contractor uc ON contractors.id = uc.contractorid
+        WHERE uc.userid = 1
+        AND (${contractid ? `contractors.id = ${contractorid}` : "1=1"})
+    ), 
+    filtered_tags AS (
+        SELECT tags.id AS tag_id, bins.contractid, bins.typeid
+        FROM tcn_tags tags
+        JOIN tcn_bins bins ON tags.binid = bins.id
+        WHERE bins.contractid IN (SELECT contract_id FROM filtered_contracts)
+    ), 
+    history_counts AS (
+        SELECT history.tagid, DATE(history.fixtime) AS record_date, COUNT(DISTINCT DATE(history.fixtime)) AS total_records
+        FROM tcb_rfid_history history
+        WHERE history.fixtime BETWEEN '${from}' AND '${to}'
+        GROUP BY history.tagid, DATE(history.fixtime)
+    ), 
+    summary_data AS (
+        SELECT
+            fc.contract_id,
+            fc.contract_name,
+            fco.company_name,
+            fct.contractor_name,
+            bt.name AS bin_type,
+            COUNT(DISTINCT ft.tag_id) * (SELECT COUNT(*) FROM dates) AS total_tags_count,
+            SUM(COALESCE(hc.total_records, 0)) AS unique_tags_count,
+            SUM(COALESCE(hc.total_records, 0)) AS total_records_count
+        FROM filtered_tags ft
+        JOIN tcn_binstypes bt ON ft.typeid = bt.id
+        LEFT JOIN history_counts hc ON ft.tag_id = hc.tagid
+        JOIN filtered_contracts fc ON ft.contractid = fc.contract_id
+        JOIN filtered_companies fco ON fc.companyid = fco.company_id
+        JOIN filtered_contractors fct ON fco.contractorid = fct.contractor_id
+        GROUP BY fc.contract_name, fco.company_name, fct.contractor_name, bt.name
+    )
+    SELECT 
+        contract_name,
+        company_name,
+        contractor_name,
+        bin_type,
+        total_tags_count,
+        unique_tags_count,
+        total_records_count,
+        IFNULL((unique_tags_count / NULLIF(total_tags_count, 0)) * 100, 0) AS uniqueness_percentage
+    FROM summary_data
+
+    UNION ALL
+
+    SELECT 
+        'total' AS contract_name,
+        '---' AS company_name,
+        '---' AS contractor_name,
+        '---' AS bin_type,
+        SUM(total_tags_count),
+        SUM(unique_tags_count),
+        SUM(total_records_count),
+        IFNULL((SUM(unique_tags_count) / NULLIF(SUM(total_tags_count), 0)) * 100, 0) AS uniqueness_percentage
+    FROM summary_data
+    ORDER BY contract_name, total_records_count DESC;
+  `;
 
   try {
     db = await dbPools.pool.getConnection();
-    const [reports, sweepers] = await Promise.all([
-      db.query(dbQueryReports),
-      db.query(dbQuerySweepers),
-    ]);
+    const data = await db.query(dbQuery, [from, to]);
 
-    const response = [
-      {
-        name: "Reports",
-        total: 100,
-        done: parseInt(reports[0].Closed),
-        rate: parseInt(
-          countRate(
-            parseInt(reports[0].total_rows),
-            parseInt(reports[0].Closed)
-          )
-        ),
-        totalItems: parseInt(reports[0].Open) + parseInt(reports[0].Closed),
-      },
-      {
-        name: "Sweepers",
-        total: 100,
-        done: parseInt(sweepers[0].total_distance),
-        rate: parseInt(sweepers[0].rate_percentage),
-        totalItems: parseInt(sweepers[0].total_distance),
-      },
-    ];
-
-    res.json(response);
+    res.json(data);
   } catch (error) {
+    console.log(error);
     res.json({ status: 500, message: "Internal server error" });
   } finally {
     if (db) {
