@@ -11,7 +11,7 @@ const tokenValidation = async (token, fn) => {
   if (tokenCache) {
     return fn(true, tokenCache, null);
   } else {
-    const dbQuery = `SELECT id, administrator FROM tc_users WHERE attributes LIKE '%"apitoken":"${token}"%'`;
+    const dbQuery = `SELECT id, administrator, attributes FROM tc_users WHERE attributes LIKE '%"apitoken":"${token}"%'`;
 
     try {
       db = await dbPools.pool.getConnection();

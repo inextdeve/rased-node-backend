@@ -1,3 +1,5 @@
+import moment from "moment";
+
 export const getDatesInRange = (startDate, endDate) => {
   const date = new Date(startDate.getTime());
 
@@ -97,3 +99,9 @@ export const flatInsertKeys = (body, skippedValues = []) => {
   //Check this you can remove this line because no need to check we checking before in 73
   return keys;
 };
+
+export function getDaysBetweenDates(date1, date2) {
+  const start = moment(date1);
+  const end = moment(date2);
+  return end.diff(start, "days"); // Get the difference in days
+}

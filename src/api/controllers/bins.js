@@ -214,6 +214,8 @@ export const Oldbins = async (req, res) => {
     }
   }
 };
+// Move this var to constant file
+const binsGet = { id: "b.id" };
 
 export const bins = async (req, res) => {
   let db;
@@ -236,6 +238,7 @@ export const bins = async (req, res) => {
     to,
     groupId,
     deviceId,
+    get,
   } = req.query;
 
   let { userId } = req.query;
@@ -259,23 +262,38 @@ export const bins = async (req, res) => {
         `"from" and "to" parameters can only be used with the "empted" query.`
       );
   }
+  let selectedColumns =
+    count && !empted
+      ? "COUNT(b.id) AS COUNT "
+      : `b.*, 
+        c.name AS contract_name, 
+        r.route_code AS route_name, 
+        t.name AS type_name,
+        tg.tag_code AS rfidtag,
+        tg.name AS tagName,
+        ctr.id AS centerid,
+        ctr.name AS center_name`;
+
+  if (get && !count) {
+    if (Array.isArray(get)) {
+      selectedColumns = get.map((item) => binsGet[item]);
+      if (empted) {
+        selectedColumns.push("tg.tag_code AS rfidtag");
+      }
+      selectedColumns = selectedColumns.join(", ");
+    } else {
+      selectedColumns = binsGet[get];
+      if (empted) {
+        selectedColumns += ", tg.tag_code AS rfidtag";
+      }
+    }
+  }
 
   // Base query (excluding tcb_rfid_history)
   // i use not empted for using the count just in bins query that not require empted bins
   let query = `
     SELECT
-      ${
-        count && !empted
-          ? "COUNT(b.id) AS COUNT "
-          : `b.*, 
-      c.name AS contract_name, 
-      r.route_code AS route_name, 
-      t.name AS type_name,
-      tg.tag_code AS rfidtag,
-      tg.name AS tagName,
-      ctr.id AS centerid,
-      ctr.name AS center_name`
-      }
+      ${selectedColumns}
     FROM tcn_bins b
     LEFT JOIN tcn_contracts c ON b.contractid = c.id
     LEFT JOIN tcn_routes r ON b.routeid = r.id
@@ -345,10 +363,13 @@ export const bins = async (req, res) => {
     params.push(`%${q}%`);
   }
 
-  const limitValue = limit ? parseInt(limit) : 30;
+  const limitValue = limit ? parseInt(limit) : 0;
   const cursorValue = cursor ? parseInt(cursor) : 0;
-  query += " LIMIT ? OFFSET ?";
-  params.push(limitValue, cursorValue);
+
+  if (limitValue) {
+    query += " LIMIT ? OFFSET ? ";
+    params.push(limitValue, cursorValue);
+  }
   try {
     // Execute the main query
     db = await dbPools.pool.getConnection();

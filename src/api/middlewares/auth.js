@@ -16,6 +16,7 @@ const auth = (req, res, next) => {
     if (valid) {
       req.userId = user.id;
       req.isAdministrator = user.administrator;
+      req.user = user;
       next();
     } else {
       res.status(498).json(error);
