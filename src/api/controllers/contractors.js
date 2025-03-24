@@ -32,7 +32,7 @@ export const contractors = async (req, res) => {
     query += " WHERE " + conditions.join(" AND ");
   }
 
-  query += "GROUP BY tcn_contractors.id";
+  query += " GROUP BY tcn_contractors.id";
 
   try {
     db = await dbPools.pool.getConnection();
