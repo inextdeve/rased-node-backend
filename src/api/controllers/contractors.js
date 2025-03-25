@@ -24,8 +24,10 @@ export const contractors = async (req, res) => {
 
   // Conditions
   if (userId) {
-    conditions.push("tcn_user_contractor.userid = ?");
-    params.push(userId);
+    conditions.push(
+      "tcn_user_contractor.userid = ? OR tcn_contractors.userid = ?"
+    );
+    params.push(userId, userId);
   }
 
   if (conditions.length) {

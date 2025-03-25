@@ -23,8 +23,8 @@ export const companies = async (req, res) => {
 
   // Conditions
   if (userId) {
-    conditions.push(`tcn_user_company.userid = ?`);
-    params.push(userId);
+    conditions.push(`tcn_user_company.userid = ? OR tcn_companies.userid = ? `);
+    params.push(userId, userId);
   }
 
   if (contractorId) {
