@@ -183,7 +183,7 @@ const summary = async (req, res) => {
         FROM tcn_contractors contractors
         JOIN tcn_user_contractor uc ON contractors.id = uc.contractorid
         WHERE uc.userid = ${userId}
-        AND (${contractId ? `contractors.id = ${contractorId}` : "1=1"})
+        AND (${contractorId ? `contractors.id = ${contractorId}` : "1=1"})
     ), 
     filtered_tags AS (
         SELECT tags.id AS tag_id, bins.contractid, bins.typeid
@@ -291,15 +291,14 @@ const summary = async (req, res) => {
     FROM summary_data
     ORDER BY contract_name, total_records_count DESC;
   `;
-  console.log(compactorsGroup);
+
   try {
     db = await dbPools.pool.getConnection();
     const data = await db.query(dbQuery, [from, to]);
 
     res.json(data);
   } catch (error) {
-    console.log(error);
-    res.json({ status: 500, message: "Internal server error" });
+    res.status(500).send("Internal server error");
   } finally {
     if (db) {
       await db.release();

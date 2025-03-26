@@ -412,7 +412,7 @@ export const bins = async (req, res) => {
       .map((binHistory) => {
         const bin = binsData.find(
           (bin) =>
-            bin.rfidtag.toLowerCase() === binHistory.rfidtag.toLowerCase()
+            bin.rfidtag?.toLowerCase() === binHistory.rfidtag?.toLowerCase()
         );
         if (!bin) return null;
         return {
