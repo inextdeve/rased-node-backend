@@ -3,7 +3,12 @@ import {
   countRate,
   getDatesInRange,
   getDaysBetweenDates,
+  hasOnlyProps,
 } from "../helpers/utils.js";
+import {
+  summaryQuerySchema,
+  formatZodError,
+} from "../validations/zodSchemas.js";
 
 const kpi = async (req, res) => {
   let db;
@@ -131,8 +136,9 @@ const kpi = async (req, res) => {
   }
 };
 
-const summary = async (req, res) => {
+export const newSummary = async (req, res) => {
   let db;
+  const query = req.query;
 
   const {
     from,
@@ -143,6 +149,175 @@ const summary = async (req, res) => {
     contractId,
     deviceCategory,
   } = req.query;
+
+  const queryValidation = summaryQuerySchema.safeParse(query);
+
+  if (!queryValidation.success) {
+    return res.status(400).send(formatZodError(queryValidation.error));
+  }
+
+  const isEmptyQuery = hasOnlyProps(query, ["from", "to"]);
+
+  const admin = req.isAdministrator;
+
+  let dbQuery = `
+    WITH 
+    filtered_contracts AS (
+        SELECT contracts.id AS contract_id, contracts.name AS contract_name, contracts.companyid
+        FROM tcn_contracts contracts
+        JOIN tcn_user_contract uc ON contracts.id = uc.contractid
+        WHERE uc.userid = ${userId}
+        AND (${contractId ? `contracts.id = ${contractId}` : "1=1 "})
+        AND (${companyId ? `contracts.companyid = ${companyId}` : "1=1"})
+    ), 
+    filtered_companies AS (
+        SELECT companies.id AS company_id, companies.name AS company_name, companies.contractorid
+        FROM tcn_companies companies
+        JOIN tcn_user_company uc ON companies.id = uc.companyid
+        WHERE uc.userid = ${userId}
+        AND (${companyId ? `companies.id = ${companyId}` : "1=1"})
+    ), 
+    filtered_contractors AS (
+        SELECT contractors.id AS contractor_id, contractors.name AS contractor_name
+        FROM tcn_contractors contractors
+        JOIN tcn_user_contractor uc ON contractors.id = uc.contractorid
+        WHERE uc.userid = ${userId}
+        AND (${contractorId ? `contractors.id = ${contractorId}` : "1=1"})
+    ), 
+    filtered_tags AS (
+        SELECT tags.id AS tag_id, bins.contractid, bins.typeid
+        FROM tcn_tags tags
+        JOIN tcn_bins bins ON tags.binid = bins.id
+        WHERE bins.contractid IN (SELECT contract_id FROM filtered_contracts)
+    ), 
+    history_counts AS (
+        SELECT history.positionid AS id, history.tagid, DATE(history.fixtime) AS record_date, COUNT(DISTINCT DATE(history.fixtime)) AS total_records
+        FROM tcb_rfid_history history
+        WHERE history.fixtime BETWEEN '${from}' AND '${to}'
+        GROUP BY history.tagid, DATE(history.fixtime)
+    ),
+    ${
+      washingGroup &&
+      `history_counts_washing AS (
+        SELECT history.positionid AS id, history.tagid, DATE(history.fixtime) AS record_date, COUNT(DISTINCT DATE(history.fixtime)) AS total_records_washing
+        FROM tcb_rfid_history history
+        JOIN tc_devices devices ON history.deviceid = devices.id
+        WHERE history.fixtime BETWEEN '${from}' AND '${to}'
+        AND devices.category IN (${washingGroup})
+        GROUP BY history.tagid, DATE(history.fixtime)
+    ),`
+    }
+    ${
+      compactorsGroup &&
+      `history_counts_compactors AS (
+        SELECT history.positionid AS id, history.tagid, DATE(history.fixtime) AS record_date, COUNT(DISTINCT DATE(history.fixtime)) AS total_records_unloading
+        FROM tcb_rfid_history history
+        JOIN tc_devices devices ON history.deviceid = devices.id
+        WHERE history.fixtime BETWEEN '${from}' AND '${to}'
+        AND devices.category IN (${compactorsGroup})
+        GROUP BY history.tagid, DATE(history.fixtime)
+    ),`
+    }
+    summary_data AS (
+        SELECT
+            fc.contract_id,
+            fc.contract_name,
+            fco.company_id,
+            fco.company_name,
+            fct.contractor_id,
+            fct.contractor_name,
+            bt.name AS bin_type,
+            ft.typeid AS bin_type_id,
+            ft.tag_id,
+            COUNT(DISTINCT ft.tag_id) * ${numOfDays} AS total_tags_count,
+            SUM(COALESCE(hc.total_records, 0)) AS unique_tags_count,
+            SUM(COALESCE(hc.total_records, 0)) AS total_records_count,
+            ${
+              washingGroup
+                ? ` SUM(COALESCE(hcw.total_records_washing, 0)) AS total_records_washing, `
+                : ""
+            }
+            ${
+              compactorsGroup
+                ? `SUM(COALESCE(hcc.total_records_unloading, 0)) AS total_records_unloading `
+                : ""
+            }
+        FROM filtered_tags ft
+        JOIN tcn_binstypes bt ON ft.typeid = bt.id
+        LEFT JOIN history_counts hc ON ft.tag_id = hc.tagid
+        LEFT JOIN history_counts_washing hcw ON hc.id = hcw.id
+        LEFT JOIN history_counts_compactors hcc ON hc.id = hcc.id
+        JOIN filtered_contracts fc ON ft.contractid = fc.contract_id
+        JOIN filtered_companies fco ON fc.companyid = fco.company_id
+        JOIN filtered_contractors fct ON fco.contractorid = fct.contractor_id
+        GROUP BY fc.contract_name, fco.company_name, fct.contractor_name, bt.name
+    )
+    SELECT 
+        bin_type_id,
+        contract_id,
+        contract_name,
+        company_id,
+        company_name,
+        contractor_id,
+        contractor_name,
+        bin_type,
+        total_tags_count,
+        unique_tags_count,
+        total_records_count,
+        total_records_washing,
+        total_records_unloading,
+        IFNULL((unique_tags_count / NULLIF(total_tags_count, 0)) * 100, 0) AS uniqueness_percentage
+    FROM summary_data
+    
+
+    UNION ALL
+
+    SELECT 
+        'total' AS contract_name,
+        '---' AS company_name,
+        '---' AS contractor_name,
+        '---' AS bin_type,
+        '---' AS contract_id,
+        '---' AS company_id,
+        '---' AS contractor_id,
+        '---' AS bin_type_id,
+        SUM(total_tags_count),
+        SUM(unique_tags_count),
+        SUM(total_records_count),
+        SUM(total_records_washing),
+        SUM(total_records_unloading),
+        IFNULL((SUM(unique_tags_count) / NULLIF(SUM(total_tags_count), 0)) * 100, 0) AS uniqueness_percentage
+    FROM summary_data
+    ORDER BY contract_name, total_records_count DESC;
+  `;
+
+  if (admin) {
+    dbQuery = "";
+  }
+};
+
+const summary = async (req, res) => {
+  let db;
+  let query = req.query;
+
+  if (req.isAdministrator) {
+    if (summaryQuerySchema.safeParse(query)) {
+    }
+  } else {
+    if (query) {
+    }
+  }
+
+  const {
+    from,
+    to,
+    userId,
+    contractorId,
+    companyId,
+    contractId,
+    deviceCategory,
+  } = req.query;
+
   let washingGroup, compactorsGroup;
 
   if (!from || !to || !userId)

@@ -105,3 +105,13 @@ export function getDaysBetweenDates(date1, date2) {
   const end = moment(date2);
   return end.diff(start, "days"); // Get the difference in days
 }
+
+/**
+ * Checks if an object contains only the specified properties.
+ * @param {Object} obj - The object to check.
+ * @param {Array} allowedProps - The list of allowed property names.
+ * @returns {boolean} - True if the object only contains the allowed properties, otherwise false.
+ */
+export function hasOnlyProps(obj, allowedProps) {
+  return Object.keys(obj).every((key) => allowedProps.includes(key));
+}
