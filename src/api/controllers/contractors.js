@@ -2,32 +2,55 @@ import dbPools from "../db/config/index.js";
 import { fitUpdateValues } from "../helpers/utils.js";
 
 const query = `
-  WITH
+   WITH
     linked_contracts AS (
-      SELECT * FROM tcn_contracts
-      JOIN tcn_user_contract user_contract ON contracts.id = user_contract.contractid
-      WHERE user_contract.userid = ? OR tcn_contracts.userid = ?
+      SELECT tcn_contracts.* FROM tcn_contracts
+      LEFT JOIN tcn_user_contract user_contract ON tcn_contracts.id = user_contract.contractid
+      WHERE user_contract.userid = 2 OR tcn_contracts.userid = 2
+      GROUP BY tcn_contracts.id
     ),
     linked_companies AS (
-      SELECT * FROM tcn_companies
-      JOIN tcn_user_company user_company ON companies.id = user_company.companyid
-      WHERE user_company.userid = ? OR tcn_companies.userid = ?
+      SELECT tcn_companies.id FROM tcn_companies
+      LEFT JOIN tcn_user_company user_company ON tcn_companies.id = user_company.companyid
+      WHERE user_company.userid = 2 OR tcn_companies.userid = 2
+      GROUP BY tcn_companies.id
     ),
     linked_contractors AS (
-      SELECT * FROM tcn_contractors
-      JOIN tcn_user_contractor user_contractor ON contractors.id = user_contractor.contractorid
-      WHERE user_contractor.userid = ? OR tcn_contractors.userid = ?
+      SELECT tcn_contractors.id FROM tcn_contractors
+      LEFT JOIN tcn_user_contractor user_contractor ON tcn_contractors.id = user_contractor.contractorid
+      WHERE user_contractor.userid = 2 OR tcn_contractors.userid = 2
+      GROUP BY tcn_contractors.id
     ),
-    parent_companies AS (
-      SELECT * FROM tcn_companies
-      JOIN tcn_contracts ON tcn_contracts.companyid = tcn_companies.id
-      WHERE tcn_contracts.id IN (linked_contracts)
+    all_contracts AS (
+      SELECT tcn_contracts.* FROM tcn_contracts
+      LEFT JOIN tcn_companies ON tcn_companies.id = tcn_contracts.companyid
+      LEFT JOIN tcn_contractors ON tcn_contractors.id = tcn_companies.contractorid
+      WHERE tcn_contractors.id IN (SELECT id FROM linked_contractors) OR tcn_companies.id IN (SELECT id FROM linked_companies) OR tcn_contracts.id IN (SELECT id FROM linked_contracts)
     ),
-    parent_contractors AS (
-      SELECT * FROM tcn_contractors
-      JOIN parent_companies ON parent_companies.contractorid = tcn_contractors.id
-      WHERE 
+    all_companies AS (
+      SELECT tcn_companies.* FROM tcn_companies
+      LEFT JOIN tcn_contracts ON tcn_contracts.companyid = tcn_companies.id
+      LEFT JOIN tcn_contractors ON tcn_contractors.id = tcn_companies.contractorid
+      WHERE tcn_contractors.id IN (SELECT id FROM linked_contractors) OR tcn_companies.id IN (SELECT id FROM linked_companies) OR tcn_contracts.id IN (SELECT id FROM linked_contracts)
+    ),
+    all_contractors AS (
+      SELECT tcn_contractors.* FROM tcn_contractors
+      LEFT JOIN tcn_companies ON tcn_contractors.id = tcn_companies.contractorid
+      LEFT JOIN tcn_contracts ON tcn_companies.id = tcn_contracts.companyid
+      WHERE tcn_contractors.id IN (SELECT id FROM linked_contractors) OR tcn_companies.id IN (SELECT id FROM linked_companies) OR tcn_contracts.id IN (SELECT id FROM linked_contracts)
     )
+SELECT 'contract' AS type,id, name
+FROM all_contracts
+
+UNION ALL
+
+SELECT 'company' AS type, id, name
+FROM all_companies
+
+UNION ALL
+
+SELECT 'contractor' AS type, id, name
+FROM all_contractors;
 `;
 
 export const contractors = async (req, res) => {
