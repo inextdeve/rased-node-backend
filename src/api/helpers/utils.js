@@ -1,4 +1,6 @@
 import moment from "moment";
+import dbPools from "../db/config/index.js";
+import { contracts } from "../controllers/contracts.js";
 
 export const getDatesInRange = (startDate, endDate) => {
   const date = new Date(startDate.getTime());
@@ -115,3 +117,39 @@ export function getDaysBetweenDates(date1, date2) {
 export function hasOnlyProps(obj, allowedProps) {
   return Object.keys(obj).every((key) => allowedProps.includes(key));
 }
+
+export const getCorpConnections = async (userId) => {
+  let db;
+
+  const query = `SELECT 
+                        GROUP_CONCAT(DISTINCT uc.contractid) AS contracts,
+                        GROUP_CONCAT(DISTINCT up.companyid) AS companies,
+                        GROUP_CONCAT(DISTINCT un.contractorid) AS contractors
+                    FROM 
+                        (SELECT DISTINCT userid FROM tcn_user_contract
+                        UNION 
+                        SELECT DISTINCT userid FROM tcn_user_company
+                        UNION 
+                        SELECT DISTINCT userid FROM tcn_user_contractor) u
+                    LEFT JOIN tcn_user_contract uc ON u.userid = uc.userid
+                    LEFT JOIN tcn_user_company up ON u.userid = up.userid
+                    LEFT JOIN tcn_user_contractor un ON u.userid = un.userid
+                    WHERE u.userid = ?
+                    GROUP BY u.userid;
+          `;
+  try {
+    db = await dbPools.pool.getConnection();
+    const data = await db.query(query, [userId]);
+    return {
+      contractId: data[0].contracts?.split(",")?.map(Number),
+      companyId: data[0].companies?.split(",")?.map(Number),
+      contractorId: data[0].contractors?.split(",")?.map(Number),
+    };
+  } catch (error) {
+    return error;
+  } finally {
+    if (db) {
+      await db.release();
+    }
+  }
+};

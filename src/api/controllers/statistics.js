@@ -1,6 +1,7 @@
 import dbPools from "../db/config/index.js";
 import {
   countRate,
+  getCorpConnections,
   getDatesInRange,
   getDaysBetweenDates,
   hasOnlyProps,
@@ -136,19 +137,13 @@ const kpi = async (req, res) => {
   }
 };
 
-export const newSummary = async (req, res) => {
+export const summary = async (req, res) => {
   let db;
   const query = req.query;
 
-  const {
-    from,
-    to,
-    userId,
-    contractorId,
-    companyId,
-    contractId,
-    deviceCategory,
-  } = req.query;
+  let { from, to, contractorId, companyId, contractId, deviceCategory } =
+    req.query;
+  const userId = req.user.id;
 
   const queryValidation = summaryQuerySchema.safeParse(query);
 
@@ -156,9 +151,29 @@ export const newSummary = async (req, res) => {
     return res.status(400).send(formatZodError(queryValidation.error));
   }
 
+  let washingGroup, compactorsGroup;
+
+  const numOfDays = getDaysBetweenDates(from, to);
+  const { dashboard } = JSON.parse(req.user.attributes);
+
+  if (dashboard?.compactors?.length) {
+    compactorsGroup = dashboard.compactors.map((c) => `'${c}'`).join(",");
+  }
+
+  if (dashboard?.washing?.length) {
+    washingGroup = dashboard.washing.map((w) => `'${w}'`).join(",");
+  }
+
   const isEmptyQuery = hasOnlyProps(query, ["from", "to"]);
 
   const admin = req.isAdministrator;
+
+  if (isEmptyQuery && !admin) {
+    const query = await getCorpConnections(req.user.id);
+    contractId = query.contractId;
+    companyId = query.companyId;
+    contractorId = query.contractorId;
+  }
 
   let dbQuery = `
     WITH 
@@ -166,23 +181,23 @@ export const newSummary = async (req, res) => {
         SELECT contracts.id AS contract_id, contracts.name AS contract_name, contracts.companyid
         FROM tcn_contracts contracts
         JOIN tcn_user_contract uc ON contracts.id = uc.contractid
-        WHERE uc.userid = ${userId}
-        AND (${contractId ? `contracts.id = ${contractId}` : "1=1 "})
-        AND (${companyId ? `contracts.companyid = ${companyId}` : "1=1"})
+        WHERE ${!admin ? `uc.userid = ${userId}` : "1=1"} 
+        AND (${contractId ? `contracts.id IN (${contractId})` : "1=1 "})
+        AND (${companyId ? `contracts.companyid IN (${companyId})` : "1=1"})
     ), 
     filtered_companies AS (
         SELECT companies.id AS company_id, companies.name AS company_name, companies.contractorid
         FROM tcn_companies companies
         JOIN tcn_user_company uc ON companies.id = uc.companyid
-        WHERE uc.userid = ${userId}
-        AND (${companyId ? `companies.id = ${companyId}` : "1=1"})
+        WHERE ${!admin ? `uc.userid = ${userId}` : "1=1"} 
+        AND (${companyId ? `companies.id IN (${companyId})` : "1=1"})
     ), 
     filtered_contractors AS (
         SELECT contractors.id AS contractor_id, contractors.name AS contractor_name
         FROM tcn_contractors contractors
         JOIN tcn_user_contractor uc ON contractors.id = uc.contractorid
-        WHERE uc.userid = ${userId}
-        AND (${contractorId ? `contractors.id = ${contractorId}` : "1=1"})
+        WHERE ${!admin ? `uc.userid = ${userId}` : "1=1"} 
+        AND (${contractorId ? `contractors.id IN (${contractorId})` : "1=1"})
     ), 
     filtered_tags AS (
         SELECT tags.id AS tag_id, bins.contractid, bins.typeid
@@ -197,8 +212,8 @@ export const newSummary = async (req, res) => {
         GROUP BY history.tagid, DATE(history.fixtime)
     ),
     ${
-      washingGroup &&
-      `history_counts_washing AS (
+      washingGroup
+        ? `history_counts_washing AS (
         SELECT history.positionid AS id, history.tagid, DATE(history.fixtime) AS record_date, COUNT(DISTINCT DATE(history.fixtime)) AS total_records_washing
         FROM tcb_rfid_history history
         JOIN tc_devices devices ON history.deviceid = devices.id
@@ -206,10 +221,11 @@ export const newSummary = async (req, res) => {
         AND devices.category IN (${washingGroup})
         GROUP BY history.tagid, DATE(history.fixtime)
     ),`
+        : ""
     }
     ${
-      compactorsGroup &&
-      `history_counts_compactors AS (
+      compactorsGroup
+        ? `history_counts_compactors AS (
         SELECT history.positionid AS id, history.tagid, DATE(history.fixtime) AS record_date, COUNT(DISTINCT DATE(history.fixtime)) AS total_records_unloading
         FROM tcb_rfid_history history
         JOIN tc_devices devices ON history.deviceid = devices.id
@@ -217,6 +233,7 @@ export const newSummary = async (req, res) => {
         AND devices.category IN (${compactorsGroup})
         GROUP BY history.tagid, DATE(history.fixtime)
     ),`
+        : ""
     }
     summary_data AS (
         SELECT
@@ -231,22 +248,30 @@ export const newSummary = async (req, res) => {
             ft.tag_id,
             COUNT(DISTINCT ft.tag_id) * ${numOfDays} AS total_tags_count,
             SUM(COALESCE(hc.total_records, 0)) AS unique_tags_count,
-            SUM(COALESCE(hc.total_records, 0)) AS total_records_count,
+            SUM(COALESCE(hc.total_records, 0)) AS total_records_count
             ${
               washingGroup
-                ? ` SUM(COALESCE(hcw.total_records_washing, 0)) AS total_records_washing, `
+                ? `, SUM(COALESCE(hcw.total_records_washing, 0)) AS total_records_washing `
                 : ""
             }
             ${
               compactorsGroup
-                ? `SUM(COALESCE(hcc.total_records_unloading, 0)) AS total_records_unloading `
+                ? `, SUM(COALESCE(hcc.total_records_unloading, 0)) AS total_records_unloading `
                 : ""
             }
         FROM filtered_tags ft
         JOIN tcn_binstypes bt ON ft.typeid = bt.id
         LEFT JOIN history_counts hc ON ft.tag_id = hc.tagid
-        LEFT JOIN history_counts_washing hcw ON hc.id = hcw.id
-        LEFT JOIN history_counts_compactors hcc ON hc.id = hcc.id
+        ${
+          washingGroup
+            ? "LEFT JOIN history_counts_washing hcw ON hc.id = hcw.id"
+            : ""
+        }
+        ${
+          compactorsGroup
+            ? "LEFT JOIN history_counts_compactors hcc ON hc.id = hcc.id"
+            : ""
+        }
         JOIN filtered_contracts fc ON ft.contractid = fc.contract_id
         JOIN filtered_companies fco ON fc.companyid = fco.company_id
         JOIN filtered_contractors fct ON fco.contractorid = fct.contractor_id
@@ -264,8 +289,8 @@ export const newSummary = async (req, res) => {
         total_tags_count,
         unique_tags_count,
         total_records_count,
-        total_records_washing,
-        total_records_unloading,
+        ${washingGroup ? "total_records_washing," : ""}
+        ${compactorsGroup ? "total_records_unloading," : ""}
         IFNULL((unique_tags_count / NULLIF(total_tags_count, 0)) * 100, 0) AS uniqueness_percentage
     FROM summary_data
     
@@ -284,19 +309,28 @@ export const newSummary = async (req, res) => {
         SUM(total_tags_count),
         SUM(unique_tags_count),
         SUM(total_records_count),
-        SUM(total_records_washing),
-        SUM(total_records_unloading),
+        ${washingGroup ? "SUM(total_records_washing)," : ""}
+        ${compactorsGroup ? "SUM(total_records_unloading)," : ""}
         IFNULL((SUM(unique_tags_count) / NULLIF(SUM(total_tags_count), 0)) * 100, 0) AS uniqueness_percentage
     FROM summary_data
     ORDER BY contract_name, total_records_count DESC;
   `;
 
-  if (admin) {
-    dbQuery = "";
+  try {
+    db = await dbPools.pool.getConnection();
+    const data = await db.query(dbQuery, [from, to]);
+
+    res.json(data);
+  } catch (error) {
+    res.status(500).send("Internal server error");
+  } finally {
+    if (db) {
+      await db.release();
+    }
   }
 };
 
-const summary = async (req, res) => {
+const Oldsummary = async (req, res) => {
   let db;
   let query = req.query;
 
@@ -565,4 +599,4 @@ const vehicle = async (req, res) => {
   }
 };
 
-export { kpi, summary, vehicle };
+export { kpi, vehicle };

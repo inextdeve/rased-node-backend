@@ -1,6 +1,35 @@
 import dbPools from "../db/config/index.js";
 import { fitUpdateValues } from "../helpers/utils.js";
 
+const query = `
+  WITH
+    linked_contracts AS (
+      SELECT * FROM tcn_contracts
+      JOIN tcn_user_contract user_contract ON contracts.id = user_contract.contractid
+      WHERE user_contract.userid = ? OR tcn_contracts.userid = ?
+    ),
+    linked_companies AS (
+      SELECT * FROM tcn_companies
+      JOIN tcn_user_company user_company ON companies.id = user_company.companyid
+      WHERE user_company.userid = ? OR tcn_companies.userid = ?
+    ),
+    linked_contractors AS (
+      SELECT * FROM tcn_contractors
+      JOIN tcn_user_contractor user_contractor ON contractors.id = user_contractor.contractorid
+      WHERE user_contractor.userid = ? OR tcn_contractors.userid = ?
+    ),
+    parent_companies AS (
+      SELECT * FROM tcn_companies
+      JOIN tcn_contracts ON tcn_contracts.companyid = tcn_companies.id
+      WHERE tcn_contracts.id IN (linked_contracts)
+    ),
+    parent_contractors AS (
+      SELECT * FROM tcn_contractors
+      JOIN parent_companies ON parent_companies.contractorid = tcn_contractors.id
+      WHERE 
+    )
+`;
+
 export const contractors = async (req, res) => {
   let db;
 
