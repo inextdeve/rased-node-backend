@@ -27,12 +27,24 @@ let CorpQuery = `
       LEFT JOIN tcn_contractors ON tcn_contractors.id = tcn_companies.contractorid
       WHERE tcn_contractors.id IN (SELECT id FROM linked_contractors) OR tcn_companies.id IN (SELECT id FROM linked_companies) OR tcn_contracts.id IN (SELECT id FROM linked_contracts)
     )
-  SELECT * FROM all_companies
+  
+    SELECT 
+    all_companies.*,
+    CASE 
+        WHEN linked_companies.id IS NOT NULL OR linked_contractors.id IS NOT NULL THEN true
+        ELSE NULL
+    END AS linked
+    FROM 
+        all_companies
+    LEFT JOIN 
+    linked_companies ON all_companies.id = linked_companies.id
+    LEFT JOIN
+    linked_contractors ON all_companies.contractorid = linked_contractors.id
 `;
 
 export const ManagmentCompanies = async (req, res) => {
   let db;
-  let { contractorId, userId } = req.query;
+  let { contractorId, userId, companyId } = req.query;
   let params = [];
   // For avoid getting companies of another user if not an admin
   if (!req.isAdministrator) {
@@ -53,6 +65,11 @@ export const ManagmentCompanies = async (req, res) => {
   if (contractorId) {
     conditions.push(`all_companies.contractorid = ?`);
     params.push(contractorId);
+  }
+
+  if (companyId) {
+    conditions.push("all_companies.id = ?");
+    params.push(companyId);
   }
 
   if (conditions.length) {

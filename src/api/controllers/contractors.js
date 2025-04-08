@@ -53,6 +53,72 @@ SELECT 'contractor' AS type, id, name
 FROM all_contractors;
 `;
 
+let CorpQuery = `
+   WITH
+    linked_contracts AS (
+      SELECT tcn_contracts.* FROM tcn_contracts
+      LEFT JOIN tcn_user_contract user_contract ON tcn_contracts.id = user_contract.contractid
+      WHERE user_contract.userid = ? OR tcn_contracts.userid = ?
+      GROUP BY tcn_contracts.id
+    ),
+    linked_companies AS (
+      SELECT tcn_companies.id FROM tcn_companies
+      LEFT JOIN tcn_user_company user_company ON tcn_companies.id = user_company.companyid
+      WHERE user_company.userid = ? OR tcn_companies.userid = ?
+      GROUP BY tcn_companies.id
+    ),
+    linked_contractors AS (
+      SELECT tcn_contractors.id FROM tcn_contractors
+      LEFT JOIN tcn_user_contractor user_contractor ON tcn_contractors.id = user_contractor.contractorid
+      WHERE user_contractor.userid = ? OR tcn_contractors.userid = ?
+      GROUP BY tcn_contractors.id
+    ),
+    all_contractors AS (
+      SELECT tcn_contractors.* FROM tcn_contractors
+      LEFT JOIN tcn_companies ON tcn_contractors.id = tcn_companies.contractorid
+      LEFT JOIN tcn_contracts ON tcn_companies.id = tcn_contracts.companyid
+      WHERE tcn_contractors.id IN (SELECT id FROM linked_contractors) OR tcn_companies.id IN (SELECT id FROM linked_companies) OR tcn_contracts.id IN (SELECT id FROM linked_contracts)
+      GROUP BY tcn_contractors.id
+      )
+  
+  SELECT * FROM all_contractors
+  
+`;
+
+// This function fetch all parent contractors for a user, for example if a user connected just with a company, and we need to fetch the contractor of that company
+export const parentContractors = async (req, res) => {
+  let db;
+
+  let { userId } = req.query;
+  let params = [];
+
+  if (!req.isAdministrator) {
+    userId = req.userId;
+    params = Array(6).fill(userId);
+  } else if (userId) {
+    params = Array(6).fill(userId);
+  } else {
+    CorpQuery = `
+      SELECT * FROM tcn_contractors
+    `;
+  }
+
+  const query = CorpQuery;
+
+  try {
+    db = await dbPools.pool.getConnection();
+
+    let data = await db.query(query, params);
+    res.json(data);
+  } catch (error) {
+    res.status(500).send("Server Error");
+  } finally {
+    if (db) {
+      await db.release();
+    }
+  }
+};
+
 export const contractors = async (req, res) => {
   let db;
 

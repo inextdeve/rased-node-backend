@@ -4,6 +4,7 @@ import {
   deleteContractor,
   getContractor,
   getContractorCompanies,
+  parentContractors,
   postContractor,
   putContractor,
 } from "../controllers/contractors.js";
@@ -11,6 +12,7 @@ import {
 const router = express.Router();
 
 router.get("/", contractors);
+router.get("/parents", parentContractors);
 router.get("/:id", getContractor);
 router.delete("/:id", deleteContractor);
 router.get("/:id/companies", getContractorCompanies);
