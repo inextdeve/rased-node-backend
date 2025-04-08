@@ -109,7 +109,6 @@ export const contracts = async (req, res) => {
 
   try {
     db = await dbPools.pool.getConnection();
-    console.log("QUERY: ", query);
     const data = await db.query(query, params);
     return res.json(data);
   } catch (error) {
@@ -189,7 +188,6 @@ export const putContract = async (req, res) => {
     db = await dbPools.pool.getConnection();
 
     if (Array.isArray(body.devices)) {
-      console.log("SU");
       // Delete existing links for these devices
       const deleteQuery = `
     DELETE FROM tcn_device_contract

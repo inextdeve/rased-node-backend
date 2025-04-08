@@ -27,7 +27,6 @@ let CorpQuery = `
       LEFT JOIN tcn_contractors ON tcn_contractors.id = tcn_companies.contractorid
       WHERE tcn_contractors.id IN (SELECT id FROM linked_contractors) OR tcn_companies.id IN (SELECT id FROM linked_companies) OR tcn_contracts.id IN (SELECT id FROM linked_contracts)
     )
-  
     SELECT 
     all_companies.*,
     CASE 
@@ -55,7 +54,7 @@ export const ManagmentCompanies = async (req, res) => {
   if (req.isAdministrator) {
     CorpQuery = `WITH
                   all_companies AS (SELECT tcn_companies.* FROM tcn_companies)
-                SELECT * FROM all_companies
+                SELECT all_companies.*, true AS linked FROM all_companies
                 `;
   }
 

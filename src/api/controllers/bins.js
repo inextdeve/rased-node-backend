@@ -74,6 +74,8 @@ export const bins = async (req, res) => {
 
   let conditions = [];
 
+  let query = CorpQuery;
+
   // For avoid getting companies of another user if not an admin
   if (!req.isAdministrator) {
     userId = req.userId;
@@ -81,15 +83,13 @@ export const bins = async (req, res) => {
   } else if (userId) {
     params = Array(6).fill(userId);
   } else {
-    CorpQuery = `
+    query = `
       WITH all_bins AS (
         SELECT tcn_bins.*
         FROM tcn_bins
       )
     `;
   }
-
-  let query = CorpQuery;
 
   let selectedColumns =
     count && !empted
