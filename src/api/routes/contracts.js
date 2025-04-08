@@ -3,6 +3,7 @@ import {
   contracts,
   deleteContract,
   getContract,
+  ManagmentContracts,
   postContract,
   putContract,
 } from "../controllers/contracts.js";
@@ -10,6 +11,7 @@ import {
 const router = express.Router();
 
 router.get("/", contracts);
+router.get("/mngmt", ManagmentContracts);
 router.get("/:id", getContract);
 router.put("/:id", putContract);
 router.delete("/:id", deleteContract);

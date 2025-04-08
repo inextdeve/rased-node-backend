@@ -6,11 +6,13 @@ import {
   putCompany,
   getCompanyContracts,
   deleteCompany,
+  ManagmentCompanies,
 } from "../controllers/companies.js";
 
 const router = express.Router();
 
 router.get("/", companies);
+router.get("/mngmt", ManagmentCompanies);
 router.get("/:id", getCompany);
 router.delete("/:id", deleteCompany);
 router.get("/:id/contracts", getCompanyContracts);
