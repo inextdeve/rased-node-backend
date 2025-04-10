@@ -39,6 +39,36 @@ let CorpQuery = `
 // Move this var to constant file
 const binsGet = { id: "b.id" };
 
+const binsHandler = async (args = {}) => {
+  let {
+    q,
+    count,
+    limit,
+    cursor,
+    contractId,
+    contractorId,
+    companyId,
+    routeid,
+    typeid,
+    tagid,
+    binId,
+    by,
+    empted,
+    from,
+    to,
+    groupId,
+    deviceId,
+    get,
+    userId,
+  } = args;
+
+  const queryValidation = binsSchema.safeParse(req.query);
+
+  if (!queryValidation.success) {
+    throw new Error(formatZodError(queryValidation.error));
+  }
+};
+
 export const bins = async (req, res) => {
   let db;
 
@@ -71,8 +101,6 @@ export const bins = async (req, res) => {
   }
 
   let params = [];
-
-  let conditions = [];
 
   let query = CorpQuery;
 
@@ -592,6 +620,7 @@ const binReports = async (req, res) => {
 
 const binCategorized = async (req, res) => {
   let db;
+  console.log("category");
 
   const query = req.query;
   const category = req.params.category;

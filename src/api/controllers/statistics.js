@@ -143,6 +143,7 @@ export const summary = async (req, res) => {
 
   let { from, to, contractorId, companyId, contractId, deviceCategory } =
     req.query;
+
   const userId = req.user.id;
 
   const queryValidation = summaryQuerySchema.safeParse(query);
@@ -167,12 +168,14 @@ export const summary = async (req, res) => {
   const isEmptyQuery = hasOnlyProps(query, ["from", "to"]);
 
   const admin = req.isAdministrator;
-
+  console.log("is Admin", admin);
   if (isEmptyQuery && !admin) {
     const query = await getCorpConnections(req.user.id);
-    contractId = query.contractId;
-    companyId = query.companyId;
-    contractorId = query.contractorId;
+    contractId = query.contractId ? query.contractId.join(", ") : undefined;
+    companyId = query.companyId ? query.companyId.join(", ") : undefined;
+    contractorId = query.contractorId
+      ? query.contractorId.join(", ")
+      : undefined;
   }
 
   let dbQuery = `
@@ -181,7 +184,11 @@ export const summary = async (req, res) => {
         SELECT contracts.id AS contract_id, contracts.name AS contract_name, contracts.companyid
         FROM tcn_contracts contracts
         JOIN tcn_user_contract uc ON contracts.id = uc.contractid
-        WHERE ${!admin ? `uc.userid = ${userId}` : "1=1"} 
+        WHERE ${
+          !admin
+            ? `(uc.userid = ${userId} OR contracts.userid = ${userId})`
+            : "1=1"
+        } 
         AND (${contractId ? `contracts.id IN (${contractId})` : "1=1 "})
         AND (${companyId ? `contracts.companyid IN (${companyId})` : "1=1"})
     ), 
@@ -189,14 +196,22 @@ export const summary = async (req, res) => {
         SELECT companies.id AS company_id, companies.name AS company_name, companies.contractorid
         FROM tcn_companies companies
         JOIN tcn_user_company uc ON companies.id = uc.companyid
-        WHERE ${!admin ? `uc.userid = ${userId}` : "1=1"} 
+        WHERE ${
+          !admin
+            ? `(uc.userid = ${userId} OR companies.userid = ${userId})`
+            : "1=1"
+        } 
         AND (${companyId ? `companies.id IN (${companyId})` : "1=1"})
     ), 
     filtered_contractors AS (
         SELECT contractors.id AS contractor_id, contractors.name AS contractor_name
         FROM tcn_contractors contractors
         JOIN tcn_user_contractor uc ON contractors.id = uc.contractorid
-        WHERE ${!admin ? `uc.userid = ${userId}` : "1=1"} 
+        WHERE ${
+          !admin
+            ? `(uc.userid = ${userId} OR contractors.userid = ${userId})`
+            : "1=1"
+        } 
         AND (${contractorId ? `contractors.id IN (${contractorId})` : "1=1"})
     ), 
     filtered_tags AS (
@@ -272,9 +287,9 @@ export const summary = async (req, res) => {
             ? "LEFT JOIN history_counts_compactors hcc ON hc.id = hcc.id"
             : ""
         }
-        JOIN filtered_contracts fc ON ft.contractid = fc.contract_id
-        JOIN filtered_companies fco ON fc.companyid = fco.company_id
-        JOIN filtered_contractors fct ON fco.contractorid = fct.contractor_id
+        LEFT JOIN filtered_contracts fc ON ft.contractid = fc.contract_id
+        LEFT JOIN filtered_companies fco ON fc.companyid = fco.company_id
+        LEFT JOIN filtered_contractors fct ON fco.contractorid = fct.contractor_id
         GROUP BY fc.contract_name, fco.company_name, fct.contractor_name, bt.name
     )
     SELECT 
@@ -315,7 +330,7 @@ export const summary = async (req, res) => {
     FROM summary_data
     ORDER BY contract_name, total_records_count DESC;
   `;
-
+  console.log(dbQuery);
   try {
     db = await dbPools.pool.getConnection();
     const data = await db.query(dbQuery, [from, to]);
