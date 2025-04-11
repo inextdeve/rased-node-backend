@@ -10,6 +10,7 @@ import {
   deleteBin,
   updateBinStatus,
   putBin,
+  categorizedBins,
 } from "../controllers/bins.js";
 import cache from "../middlewares/cache.js";
 
@@ -20,6 +21,7 @@ const router = express.Router();
 router.get("/", bins);
 router.get("/reports", binReports);
 router.get("/summary", summary);
+router.get("/categorized", categorizedBins);
 router.get("/by/:category", binCategorized);
 router.get("/:id", binById);
 
