@@ -1,6 +1,12 @@
 import moment from "moment";
 import dbPools from "../db/config/index.js";
-import { fitUpdateValues, getDaysBetweenDates } from "../helpers/utils.js";
+import {
+  arrayToObjectByKey,
+  countRate,
+  fitUpdateValues,
+  getDaysBetweenDates,
+  pickKeysFromObjects,
+} from "../helpers/utils.js";
 import { binsSchema, formatZodError } from "../validations/zodSchemas.js";
 
 let CorpQuery = `
@@ -39,7 +45,7 @@ let CorpQuery = `
 export const categorizedBins = async (req, res) => {
   let db;
 
-  let { from, to, userId, empted, by } = req.query;
+  let { from, to, userId, empted, washed, by } = req.query;
 
   // const queryValidation = binsCategorizedSchama.safeParse(req.query);
 
@@ -62,6 +68,18 @@ export const categorizedBins = async (req, res) => {
             `;
   }
 
+  let washingGroup, compactorsGroup;
+
+  const { dashboard } = JSON.parse(req.user.attributes);
+
+  if (dashboard?.compactors?.length) {
+    compactorsGroup = dashboard.compactors.map((c) => `'${c}'`).join(",");
+  }
+
+  if (dashboard?.washing?.length) {
+    washingGroup = dashboard.washing.map((w) => `'${w}'`).join(",");
+  }
+
   if (by === "types") {
     query += `, filtered_bins AS (SELECT all_bins.tagid, tcn_binstypes.name AS ${by} FROM all_bins
 				LEFT JOIN tcn_binstypes ON all_bins.typeid = tcn_binstypes.id)`;
@@ -81,8 +99,38 @@ export const categorizedBins = async (req, res) => {
   if (empted) {
     const numOfDays = getDaysBetweenDates(from, to);
 
-    query += `, tags_history AS (SELECT tagid FROM tcb_rfid_history 
+    query += `, tags_history AS (SELECT tagid FROM tcb_rfid_history
+                  LEFT JOIN tc_devices ON tcb_rfid_history.deviceid = tc_devices.id
                   WHERE fixtime BETWEEN '${from}' AND '${to}'
+                  AND ${
+                    compactorsGroup
+                      ? `tc_devices.category IN (${compactorsGroup})`
+                      : "1=1"
+                  }
+                  GROUP BY  tagid, Date(fixtime)),
+                  grouped_tags_history AS (SELECT  *, COUNT(tagid)  AS total_records FROM tags_history
+                  GROUP BY tagid)
+
+                  SELECT filtered_bins.${by},
+                  SUM(CASE WHEN total_records IS NOT NULL THEN total_records ELSE 0 END) AS total_done,
+                  (COUNT(filtered_bins.${by}) * ${numOfDays}) - SUM(CASE WHEN total_records IS NOT NULL THEN total_records ELSE 0 END) AS total_undone,
+                  CAST(COUNT(filtered_bins.${by}) * ${numOfDays} AS CHAR) AS total
+                  FROM filtered_bins
+                  left JOIN grouped_tags_history h ON h.tagid = filtered_bins.tagid
+                  GROUP BY filtered_bins.${by}
+                  `;
+    params.push(from, to);
+  } else if (washed) {
+    const numOfDays = getDaysBetweenDates(from, to);
+
+    query += `, tags_history AS (SELECT tagid FROM tcb_rfid_history
+                  LEFT JOIN tc_devices ON tcb_rfid_history.deviceid = tc_devices.id
+                  WHERE fixtime BETWEEN '${from}' AND '${to}'
+                  AND ${
+                    washingGroup
+                      ? `tc_devices.category IN (${washingGroup})`
+                      : "1=1"
+                  }
                   GROUP BY  tagid, Date(fixtime)),
                   grouped_tags_history AS (SELECT  *, COUNT(tagid)  AS total_records FROM tags_history
                   GROUP BY tagid)
@@ -103,7 +151,143 @@ export const categorizedBins = async (req, res) => {
   try {
     // Execute the main query
     db = await dbPools.pool.getConnection();
-    const data = await db.query(query, params);
+    let data = await db.query(query, params);
+
+    data = data.map((item) => ({
+      ...item,
+      rate: countRate(item.total, item.total_done).toFixed(2) + " %",
+    }));
+
+    data.push({
+      [by]: "total",
+      total_done: data.reduce(
+        (acc, item) => acc + parseInt(item.total_done),
+        0
+      ),
+      total_undone: data.reduce(
+        (acc, item) => acc + parseInt(item.total_undone),
+        0
+      ),
+      total: data.reduce((acc, item) => acc + parseInt(item.total), 0),
+      rate:
+        countRate(
+          data.reduce((acc, item) => acc + parseInt(item.total), 0),
+          data.reduce((acc, item) => acc + parseInt(item.total_done), 0)
+        ).toFixed(2) + " %",
+    });
+
+    res.json(data);
+  } catch (error) {
+    console.log(error);
+    res.status(500).send("Server Error");
+  } finally {
+    if (db) {
+      await db.release();
+    }
+  }
+};
+
+export const summary = async (req, res) => {
+  let db;
+
+  let { from, to, empted, washed, userId } = req.query;
+
+  if (!from || !to) {
+    return res
+      .status(400)
+      .send(`Both "from" and "to" parameters are required.`);
+  }
+
+  let params = [];
+
+  let query = CorpQuery;
+
+  if (!req.isAdministrator) {
+    userId = req.userId;
+    params = Array(6).fill(userId);
+  } else if (userId) {
+    params = Array(6).fill(userId);
+  } else {
+    query = `WITH all_bins AS (SELECT * FROM tcn_bins)
+            `;
+  }
+
+  let washingGroup, compactorsGroup;
+
+  const { dashboard } = JSON.parse(req.user.attributes);
+
+  if (dashboard?.compactors?.length) {
+    compactorsGroup = dashboard.compactors.map((c) => `'${c}'`).join(",");
+  }
+
+  if (dashboard?.washing?.length) {
+    washingGroup = dashboard.washing.map((w) => `'${w}'`).join(",");
+  }
+
+  if (empted) {
+    query += `, tags_history AS
+    (SELECT tagid, DATE(fixtime) AS record_date FROM tcb_rfid_history
+    LEFT JOIN tc_devices ON tcb_rfid_history.deviceid = tc_devices.id
+    WHERE fixtime BETWEEN ? AND ?
+    AND ${
+      compactorsGroup ? `tc_devices.category IN (${compactorsGroup})` : "1=1"
+    }
+    GROUP BY tagid, record_date),
+
+    grouped_tags_history AS (SELECT record_date, COUNT(tagid) AS total_records, (SELECT COUNT(id) FROM all_bins) AS total FROM tags_history
+    GROUP BY record_date)
+
+    SELECT CAST(total_records AS CHAR) AS total_done, CAST(total AS CHAR) AS total, record_date AS summary_date FROM grouped_tags_history
+                      `;
+  } else if (washed) {
+    query += `, tags_history AS
+    (SELECT tagid, DATE(fixtime) AS record_date FROM tcb_rfid_history
+    LEFT JOIN tc_devices ON tcb_rfid_history.deviceid = tc_devices.id
+    WHERE fixtime BETWEEN ? AND ?
+    AND ${washingGroup ? `tc_devices.category IN (${washingGroup})` : "1=1"}
+    GROUP BY tagid, record_date),
+
+    grouped_tags_history AS (SELECT record_date, COUNT(tagid) AS total_records, (SELECT COUNT(id) FROM all_bins) AS total FROM tags_history
+    GROUP BY record_date)
+
+    SELECT CAST(total_records AS CHAR) AS total_done, CAST(total AS CHAR) AS total, record_date AS summary_date FROM grouped_tags_history
+                      `;
+  }
+
+  params.push(from, to);
+
+  try {
+    // Execute the main query
+    db = await dbPools.pool.getConnection();
+    let data = await db.query(query, params);
+    data = data.map((item) => ({
+      ...item,
+      summary_date: moment(item.summary_date).format("YYYY-MM-DD"),
+      total_undone: parseInt(item.total) - parseInt(item.total_done),
+      rate: countRate(item.total, item.total_done).toFixed(2) + " %",
+    }));
+
+    // General status TOTAL
+
+    const total_rate = countRate(
+      data.reduce((acc, item) => acc + parseInt(item.total), 0),
+      data.reduce((acc, item) => acc + parseInt(item.total_done), 0)
+    ).toFixed(2);
+
+    data.push({
+      total_done: data.reduce(
+        (acc, item) => acc + parseInt(item.total_done),
+        0
+      ),
+      total: data.reduce((acc, item) => acc + parseInt(item.total), 0),
+      total_undone: data.reduce(
+        (acc, item) => acc + parseInt(item.total_undone),
+        0
+      ),
+      rate: isNaN(total_rate) ? "0 %" : total_rate + " %",
+      summary_date: "total",
+    });
+
     res.json(data);
   } catch (error) {
     console.log(error);
@@ -116,7 +300,11 @@ export const categorizedBins = async (req, res) => {
 };
 
 // Move this var to constant file
-const binsGet = { id: "b.id" };
+const binsGet = {
+  id: "b.id",
+  longitude: "b.longitude",
+  latitude: "b.latitude",
+};
 
 const binsHandler = async (req = {}) => {
   let {
@@ -411,6 +599,7 @@ export const bins = async (req, res) => {
   if (get && !count) {
     if (Array.isArray(get)) {
       selectedColumns = get.map((item) => binsGet[item]);
+
       if (empted) {
         selectedColumns.push("tg.tag_code AS rfidtag");
       }
@@ -505,48 +694,42 @@ export const bins = async (req, res) => {
       return res.json(binsData);
     }
     // Extract tag codes for querying tcb_rfid_history
-    const tagCodes = binsData.map((bin) => bin.rfidtag).filter((tag) => tag); // Ensure tag_code exists
+
     let historyData = [];
 
-    if (tagCodes.length > 0) {
-      const historyParams = [from, to, ...tagCodes];
-      let historyQuery = `
+    const historyParams = [from, to];
+    let historyQuery = `
         SELECT h.fixtime as empted_time, h.rfidtag, h.deviceid, dv.category AS deviceCategory
         FROM tcb_rfid_history h
         LEFT JOIN tc_devices dv ON h.deviceid = dv.id
         WHERE h.fixtime >= ? AND h.fixtime <= ?
-        AND h.rfidtag IN (${tagCodes.map(() => "?").join(", ")})
       `;
 
-      if (deviceId) {
-        if (Array.isArray(deviceId)) {
-          historyQuery += ` AND h.deviceid IN (${deviceId
-            .map(() => "?")
-            .join(", ")}) `;
-          historyParams.push(...deviceId);
-        } else {
-          historyQuery += " AND h.deviceid = ? ";
-          historyParams.push(deviceId);
-        }
+    if (deviceId) {
+      if (Array.isArray(deviceId)) {
+        historyQuery += ` AND h.deviceid IN (${deviceId
+          .map(() => "?")
+          .join(", ")}) `;
+        historyParams.push(...deviceId);
+      } else {
+        historyQuery += " AND h.deviceid = ? ";
+        historyParams.push(deviceId);
       }
-
-      historyData = await db.query(historyQuery, historyParams);
     }
 
-    const dataWithHistory = historyData
-      .map((binHistory) => {
-        const bin = binsData.find(
-          (bin) =>
-            bin.rfidtag?.toLowerCase() === binHistory.rfidtag?.toLowerCase()
-        );
-        if (!bin) return null;
-        return {
-          ...bin,
-          empted_time: binHistory.empted_time,
-          ...binHistory,
-        };
-      })
-      .filter(Boolean);
+    historyData = await db.query(historyQuery, historyParams);
+
+    const binObj = arrayToObjectByKey("rfidtag", binsData);
+
+    historyData.forEach((item) => {
+      if (!binObj[item.rfidtag]) return;
+      if (binObj?.empted_time) {
+        binObj[item.rfidtag].empted_time.push(item.empted_time);
+      }
+      binObj[item.rfidtag].empted_time = [item.empted_time];
+    });
+
+    const dataWithHistory = Object.values(binObj);
 
     // Grouping logic (if "by" is specified)
     if (by) {
@@ -566,7 +749,12 @@ export const bins = async (req, res) => {
       }
     }
 
-    res.status(200).json(dataWithHistory);
+    if (get) {
+      const filteredData = dataWithHistory; //pickKeysFromObjects(get, dataWithHistory);
+      res.status(200).json(filteredData);
+    } else {
+      res.status(200).json(dataWithHistory);
+    }
   } catch (error) {
     console.log(error);
     res.status(400).send("Server Error");
@@ -1021,62 +1209,62 @@ const binCategorized = async (req, res) => {
   }
 };
 
-const summary = async (req, res) => {
-  let db;
+// const summary = async (req, res) => {
+//   let db;
 
-  const query = req.query;
-  //Query for last 7 days bins status
-  const dbQuery = `SELECT tcn_poi_schedule.geoid, tcn_poi_schedule.serv_time FROM tcn_poi_schedule
-                    WHERE tcn_poi_schedule.serv_time BETWEEN "${
-                      query.from
-                    }" AND ${
-    query.to ? `"${query.to}"` : false || "(select current_timestamp)"
-  }`;
-  //Query for all bins
-  const queryAllBins = `SELECT COUNT(tc_geofences.id) AS counter FROM tc_geofences
-                        WHERE tc_geofences.attributes LIKE '%"bins": "yes"%' AND JSON_EXTRACT(tc_geofences.attributes, "$.cartoon") IS NULL`;
+//   const query = req.query;
+//   //Query for last 7 days bins status
+//   const dbQuery = `SELECT tcn_poi_schedule.geoid, tcn_poi_schedule.serv_time FROM tcn_poi_schedule
+//                     WHERE tcn_poi_schedule.serv_time BETWEEN "${
+//                       query.from
+//                     }" AND ${
+//     query.to ? `"${query.to}"` : false || "(select current_timestamp)"
+//   }`;
+//   //Query for all bins
+//   const queryAllBins = `SELECT COUNT(tc_geofences.id) AS counter FROM tc_geofences
+//                         WHERE tc_geofences.attributes LIKE '%"bins": "yes"%' AND JSON_EXTRACT(tc_geofences.attributes, "$.cartoon") IS NULL`;
 
-  try {
-    db = await dbPools.pool.getConnection();
-    const [allBins, data] = await Promise.all([
-      db.query(queryAllBins),
-      db.query(dbQuery),
-    ]);
+//   try {
+//     db = await dbPools.pool.getConnection();
+//     const [allBins, data] = await Promise.all([
+//       db.query(queryAllBins),
+//       db.query(dbQuery),
+//     ]);
 
-    const groupedByDate = new Object();
+//     const groupedByDate = new Object();
 
-    data.forEach((item) => {
-      const date = item.serv_time.toISOString().split("T")[0];
-      if (groupedByDate[date]) {
-        groupedByDate[date] += 1;
-        return;
-      }
-      groupedByDate[date] = 1;
-    });
+//     data.forEach((item) => {
+//       const date = item.serv_time.toISOString().split("T")[0];
+//       if (groupedByDate[date]) {
+//         groupedByDate[date] += 1;
+//         return;
+//       }
+//       groupedByDate[date] = 1;
+//     });
 
-    const response = new Array();
+//     const response = new Array();
 
-    for (let key in groupedByDate) {
-      //Skip the first day because is not full
-      // if (key === query.from.split("T")[0]) {
-      //   continue;
-      // }
-      response.push({
-        date: key,
-        total: parseInt(allBins[0].counter),
-        empty_bin: groupedByDate[key],
-        un_empty_bin: parseInt(allBins[0].counter) - groupedByDate[key],
-      });
-    }
-    res.json(response);
-  } catch (error) {
-    res.status(500).end();
-  } finally {
-    if (db) {
-      await db.release();
-    }
-  }
-};
+//     for (let key in groupedByDate) {
+//       //Skip the first day because is not full
+//       // if (key === query.from.split("T")[0]) {
+//       //   continue;
+//       // }
+//       response.push({
+//         date: key,
+//         total: parseInt(allBins[0].counter),
+//         empty_bin: groupedByDate[key],
+//         un_empty_bin: parseInt(allBins[0].counter) - groupedByDate[key],
+//       });
+//     }
+//     res.json(response);
+//   } catch (error) {
+//     res.status(500).end();
+//   } finally {
+//     if (db) {
+//       await db.release();
+//     }
+//   }
+// };
 
 // Patch Controllers
 const updateBin = () => {};
@@ -1231,7 +1419,6 @@ export {
   binById,
   binReports,
   binCategorized,
-  summary,
   updateBin,
   addBin,
   deleteBin,

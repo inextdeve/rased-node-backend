@@ -61,7 +61,7 @@ export const binsSchema = z
     userId: ZodNumber,
     by: z.string().optional(),
     deviceId: ZodNumber,
-    get: z.string().optional(),
+    get: z.string().or(z.array(z.string())).optional(),
   })
   .superRefine((data, ctx) => {
     const { from, to, empted } = data;

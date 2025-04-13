@@ -19,7 +19,7 @@ export const getDatesInRange = (startDate, endDate) => {
  * @param {Number} n Targeted items
  */
 
-export const countRate = (total, n) => (n * 100) / total;
+export const countRate = (total, n) => (Number(n) * 100) / Number(total);
 
 /**
  * @param {Array} arr Array of values
@@ -153,3 +153,33 @@ export const getCorpConnections = async (userId) => {
     }
   }
 };
+
+/**
+ * Returns a new array of objects with only the specified keys.
+ * @param {Array<Object>} arr - The array of objects to filter.
+ * @param {Array<string>} keys - The array of keys to pick from each object.
+ * @returns {Array<Object>} - A new array of objects with only the specified keys.
+ */
+
+export function pickKeysFromObjects(keys, arr) {
+  if (typeof keys === "string") {
+    keys = [keys];
+  }
+  return arr.map((obj) =>
+    Object.fromEntries(keys.map((key) => [key, obj[key]]))
+  );
+}
+
+/**
+ * Converts an array of objects into an object, using a specified key as the property.
+ *
+ * @param {string} key - The key in each object to be used as the property name for the new object.
+ * @param {Array<Object>} arr - The array of objects to be converted.
+ * @returns {Object} The resulting object, where each key is the value of the specified key in the input objects.
+ */
+export function arrayToObjectByKey(key, arr) {
+  return arr.reduce((acc, item) => {
+    acc[item[key]] = item;
+    return acc;
+  }, {});
+}

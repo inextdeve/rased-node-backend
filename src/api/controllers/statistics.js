@@ -191,6 +191,7 @@ export const summary = async (req, res) => {
         } 
         AND (${contractId ? `contracts.id IN (${contractId})` : "1=1 "})
         AND (${companyId ? `contracts.companyid IN (${companyId})` : "1=1"})
+        GROUP BY contracts.id
     ), 
     filtered_companies AS (
         SELECT companies.id AS company_id, companies.name AS company_name, companies.contractorid
@@ -202,6 +203,7 @@ export const summary = async (req, res) => {
             : "1=1"
         } 
         AND (${companyId ? `companies.id IN (${companyId})` : "1=1"})
+        GROUP BY companies.id
     ), 
     filtered_contractors AS (
         SELECT contractors.id AS contractor_id, contractors.name AS contractor_name
@@ -213,6 +215,7 @@ export const summary = async (req, res) => {
             : "1=1"
         } 
         AND (${contractorId ? `contractors.id IN (${contractorId})` : "1=1"})
+        GROUP BY contractors.id
     ), 
     filtered_tags AS (
         SELECT tags.id AS tag_id, bins.contractid, bins.typeid
