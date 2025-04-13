@@ -16,7 +16,7 @@ import cache from "../middlewares/cache.js";
 
 const router = express.Router();
 
-// router.use(cache(30, "json"));
+router.use(cache(30, "json"));
 
 router.get("/", bins);
 router.get("/reports", binReports);
