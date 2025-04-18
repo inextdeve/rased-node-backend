@@ -33,10 +33,10 @@ export const isTokenUnique = async (req, res) => {
   const dbQuery = `SELECT id FROM tc_users WHERE attributes LIKE '%"apitoken":"${token}"%' AND id != ${userId}`;
 
   try {
-    console.log("IS HERE");
     db = await dbPools.pool.getConnection();
     const data = await db.query(dbQuery);
-    if (data.length) {
+
+    if (data.length && data[0].id !== Number(userId)) {
       throw new Error("Already Exist");
     }
     res.status(200).send("OK");
