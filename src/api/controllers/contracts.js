@@ -130,7 +130,7 @@ export const getContract = async (req, res) => {
 
   let query = `SELECT tcn_contracts.*, tcn_companies.name AS company_name FROM tcn_contracts JOIN tcn_companies ON tcn_companies.id = tcn_contracts.companyid  WHERE tcn_contracts.id=${Number(
     id
-  )} AND tcn_contracts.userid=${req.userId}`;
+  )}`;
   //Check if the user request just a related element to contract like if he want just the company related to it
   try {
     if (reqQuery?.get) {
@@ -163,7 +163,6 @@ export const getContract = async (req, res) => {
     if (data.length) return res.json(data[0]);
     else throw new Error("Not Found");
   } catch (error) {
-    console.log(error);
     return res.status(404).end(error.message || "Server Error");
   } finally {
     if (db) {
