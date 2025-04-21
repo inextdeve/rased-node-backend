@@ -670,7 +670,7 @@ export const sweepingSummary = async (req, res) => {
     params = Array(6).fill(userId);
   } else {
     query = `
-      WITH all_contracts AS (SELECT c.id AS contract_id, c.name AS project_name, c.companyid FROM tcn_contracts c),
+      WITH all_contracts AS (SELECT c.id AS contract_id, c.name AS project_name, c.companyid, JSON_EXTRACT(c.attributes, '$.dailyAverage.automatedSweeping') as dailyRequired FROM tcn_contracts c),
       filtered_devices AS (
         SELECT dc.deviceid, dc.contractid, c.companyid, co.contractorid
       FROM tcn_device_contract dc
@@ -728,7 +728,8 @@ SELECT
     fct.name AS contractor_name,
     COUNT(DISTINCT fd.deviceid) AS total_devices,
     SUM(pd.total_distance) AS total_brush_distance,
-    dl.device_ids
+    dl.device_ids,
+    fc.dailyRequired
 FROM all_contracts fc
 JOIN tcn_companies fco ON fc.companyid = fco.id
 JOIN tcn_contractors fct ON fco.contractorid = fct.id
@@ -760,7 +761,15 @@ ORDER BY fc.project_name, total_brush_distance DESC;
         (acc, item) => acc + item.total_brush_distance,
         0
       ),
-      device_ids: parseData.map((item) => item.device_ids).join(", "),
+      device_ids: parseData
+        .map((item) => item.device_ids)
+        .join(", ")
+        .split(", ")
+        .map(Number),
+      dailyRequired: parseData.reduce((acc, item) => {
+        if (isNaN(item.dailyRequired)) return acc;
+        return acc + item.dailyRequired;
+      }, 0),
     });
 
     res.json(parseData);

@@ -1,5 +1,4 @@
 import dbPools from "../db/config/index.js";
-import { fitUpdateValues } from "../helpers/utils.js";
 
 let CorpQuery = `
    WITH
@@ -27,7 +26,7 @@ let CorpQuery = `
       LEFT JOIN tcn_contractors ON tcn_contractors.id = tcn_companies.contractorid
       WHERE tcn_contractors.id IN (SELECT id FROM linked_contractors) OR tcn_companies.id IN (SELECT id FROM linked_companies) OR tcn_contracts.id IN (SELECT id FROM linked_contracts)
     )
-  SELECT * FROM all_contracts
+  SELECT id, start_date, end_date, terms, userid, status, name, companyid, JSON_EXTRACT(attributes, '$') AS attributes FROM all_contracts
 `;
 
 export const ManagmentContracts = async (req, res) => {
@@ -41,8 +40,8 @@ export const ManagmentContracts = async (req, res) => {
   }
   if (req.isAdministrator) {
     CorpQuery = `WITH
-                  all_contracts AS (SELECT tcn_contracts.* FROM tcn_contracts)
-                SELECT * FROM all_contracts
+                  all_contracts AS (SELECT * FROM tcn_contracts)
+                SELECT id, start_date, end_date, terms, userid, status, name, companyid, JSON_EXTRACT(attributes, '$') AS attributes FROM all_contracts
                 `;
   }
   let query = CorpQuery;
@@ -78,7 +77,7 @@ export const contracts = async (req, res) => {
 
   let conditions = [];
 
-  let query = `SELECT tcn_contracts.*, tcn_contractors.id AS contractorId FROM tcn_contracts 
+  let query = `SELECT tcn_contracts.id, tcn_contracts.start_date, tcn_contracts.end_date, tcn_contracts.terms, tcn_contracts.userid, tcn_contracts.status, tcn_contracts.name, tcn_contracts.companyid, JSON_EXTRACT(tcn_contracts.attributes, '$') AS attributes, tcn_contractors.id AS contractorId FROM tcn_contracts
                 LEFT JOIN tcn_companies ON tcn_contracts.companyid = tcn_companies.id
                 LEFT JOIN tcn_contractors on tcn_companies.contractorid = tcn_contractors.id `;
 
@@ -128,7 +127,7 @@ export const getContract = async (req, res) => {
 
   const id = req.params.id;
 
-  let query = `SELECT tcn_contracts.*, tcn_companies.name AS company_name FROM tcn_contracts JOIN tcn_companies ON tcn_companies.id = tcn_contracts.companyid  WHERE tcn_contracts.id=${Number(
+  let query = `SELECT tcn_contracts.id, tcn_contracts.start_date, tcn_contracts.end_date, tcn_contracts.terms, tcn_contracts.userid, tcn_contracts.status, tcn_contracts.name, tcn_contracts.companyid, JSON_EXTRACT(tcn_contracts.attributes, '$') AS attributes, tcn_companies.name AS company_name FROM tcn_contracts JOIN tcn_companies ON tcn_companies.id = tcn_contracts.companyid  WHERE tcn_contracts.id=${Number(
     id
   )}`;
   //Check if the user request just a related element to contract like if he want just the company related to it
