@@ -5,6 +5,7 @@ import {
   getDatesInRange,
   getDaysBetweenDates,
   hasOnlyProps,
+  safeJson,
 } from "../helpers/utils.js";
 import {
   summaryQuerySchema,
@@ -610,6 +611,162 @@ const vehicle = async (req, res) => {
     res.json(response);
   } catch (error) {
     res.json({ status: 500, message: "Internal server error" });
+  } finally {
+    if (db) {
+      await db.release();
+    }
+  }
+};
+
+let CorpQuery = `
+   WITH
+    linked_contracts AS (
+      SELECT tcn_contracts.* FROM tcn_contracts
+      LEFT JOIN tcn_user_contract user_contract ON tcn_contracts.id = user_contract.contractid
+      WHERE user_contract.userid = ? OR tcn_contracts.userid = ?
+      GROUP BY tcn_contracts.id
+    ),
+    linked_companies AS (
+      SELECT tcn_companies.id FROM tcn_companies
+      LEFT JOIN tcn_user_company user_company ON tcn_companies.id = user_company.companyid
+      WHERE user_company.userid = ? OR tcn_companies.userid = ?
+      GROUP BY tcn_companies.id
+    ),  
+    linked_contractors AS (
+      SELECT tcn_contractors.id FROM tcn_contractors
+      LEFT JOIN tcn_user_contractor user_contractor ON tcn_contractors.id = user_contractor.contractorid
+      WHERE user_contractor.userid = ? OR tcn_contractors.userid = ?
+      GROUP BY tcn_contractors.id
+    ),
+    all_contracts AS (
+      SELECT tcn_contracts.id AS contract_id, tcn_contracts.name AS project_name, tcn_contracts.companyid FROM tcn_contracts
+      LEFT JOIN tcn_companies ON tcn_companies.id = tcn_contracts.companyid
+      LEFT JOIN tcn_contractors ON tcn_contractors.id = tcn_companies.contractorid
+      WHERE tcn_contractors.id IN (SELECT id FROM linked_contractors) OR tcn_companies.id IN (SELECT id FROM linked_companies) OR tcn_contracts.id IN (SELECT id FROM linked_contracts)
+    ),
+  filtered_devices AS (
+  SELECT dc.deviceid, dc.contractid, c.companyid, co.contractorid
+    FROM tcn_device_contract dc
+    JOIN tc_devices d ON dc.deviceid = d.id
+    JOIN tcn_contracts c ON dc.contractid = c.id
+    JOIN tcn_companies co ON c.companyid = co.id
+    WHERE dc.contractid IN (SELECT id FROM all_contracts) AND d.category = 'sweeper' 
+`;
+
+export const sweepingSummary = async (req, res) => {
+  let db;
+
+  let { contractorId, companyId, contractId, from, to, userId } = req.query;
+
+  let params = [];
+
+  let query = CorpQuery;
+
+  // For avoid getting companies of another user if not an admin
+  if (!req.isAdministrator) {
+    userId = req.userId;
+    params = Array(6).fill(userId);
+  } else if (userId) {
+    params = Array(6).fill(userId);
+  } else {
+    query = `
+      WITH all_contracts AS (SELECT c.id AS contract_id, c.name AS project_name, c.companyid FROM tcn_contracts c),
+      filtered_devices AS (
+        SELECT dc.deviceid, dc.contractid, c.companyid, co.contractorid
+      FROM tcn_device_contract dc
+      JOIN tc_devices d ON dc.deviceid = d.id
+      JOIN tcn_contracts c ON dc.contractid = c.id
+      JOIN tcn_companies co ON c.companyid = co.id
+      WHERE d.category = 'sweeper' 
+    `;
+  }
+
+  if (contractorId) {
+    query += `AND co.contractorid = ? `;
+    params.push(contractorId);
+  }
+
+  if (companyId) {
+    query += `AND c.companyid = ? `;
+    params.push(companyId);
+  }
+
+  if (contractId) {
+    query += `AND dc.contractid = ? `;
+    params.push(contractId);
+  }
+
+  const max_distance_threshold = 300;
+
+  query += `), position_distances AS (
+    SELECT 
+        fd.contractid,
+        fd.companyid,
+        fd.contractorid,
+        fd.deviceid,
+        SUM(CASE 
+                WHEN JSON_UNQUOTE(JSON_EXTRACT(p.attributes, '$.Brush')) = 'true' 
+                     AND COALESCE(CAST(JSON_UNQUOTE(JSON_EXTRACT(p.attributes, '$.distance')) AS DECIMAL(10,2)), 0) <= ?
+                THEN COALESCE(CAST(JSON_UNQUOTE(JSON_EXTRACT(p.attributes, '$.distance')) AS DECIMAL(10,2)), 0)
+                ELSE 0
+            END) AS total_distance
+    FROM tc_positions p
+    JOIN filtered_devices fd ON p.deviceid = fd.deviceid
+    WHERE p.fixtime BETWEEN ? AND ?
+    GROUP BY fd.contractid, fd.companyid, fd.contractorid, fd.deviceid
+    ),
+    device_list AS (
+    SELECT 
+        fd.contractid,
+        GROUP_CONCAT(DISTINCT fd.deviceid ORDER BY fd.deviceid SEPARATOR ', ') AS device_ids
+    FROM filtered_devices fd
+    GROUP BY fd.contractid
+    )
+SELECT 
+    fc.project_name,
+    fco.name AS company_name,
+    fct.name AS contractor_name,
+    COUNT(DISTINCT fd.deviceid) AS total_devices,
+    SUM(pd.total_distance) AS total_brush_distance,
+    dl.device_ids
+FROM all_contracts fc
+JOIN tcn_companies fco ON fc.companyid = fco.id
+JOIN tcn_contractors fct ON fco.contractorid = fct.id
+JOIN filtered_devices fd ON fc.contract_id = fd.contractid
+LEFT JOIN position_distances pd ON fd.deviceid = pd.deviceid AND fd.contractid = pd.contractid
+LEFT JOIN device_list dl ON fc.contract_id = dl.contractid
+GROUP BY fc.project_name, company_name, contractor_name, fc.contract_id, dl.device_ids
+ORDER BY fc.project_name, total_brush_distance DESC;
+
+`;
+
+  params.push(max_distance_threshold, from, to);
+
+  try {
+    db = await dbPools.pool.getConnection();
+    const data = await db.query(query, params);
+
+    const parseData = safeJson(data);
+
+    parseData.push({
+      project_name: "Total",
+      company_name: "Total",
+      contractor_name: "Total",
+      total_devices: parseData.reduce(
+        (acc, item) => acc + item.total_devices,
+        0
+      ),
+      total_brush_distance: parseData.reduce(
+        (acc, item) => acc + item.total_brush_distance,
+        0
+      ),
+      device_ids: parseData.map((item) => item.device_ids).join(", "),
+    });
+
+    res.json(parseData);
+  } catch (error) {
+    console.log(error);
+    res.status(500).send("Server Error");
   } finally {
     if (db) {
       await db.release();

@@ -51,7 +51,9 @@ export const fitUpdateValues = (body, skipedValues = []) => {
 
     if (typeof body[key] === "number" || body[key] === null)
       keyValue += `${key}=${body[key]}`;
-    else keyValue += `${key}="${body[key]}"`;
+    else if (key === "start_date" || key === "end_date")
+      keyValue += `${key}='${moment(body[key]).format("YYYY-MM-DDTHH:mm:ss")}'`;
+    else keyValue += `${key}='${body[key]}'`;
 
     if (index === array.length - 1) return;
 
@@ -182,4 +184,24 @@ export function arrayToObjectByKey(key, arr) {
     acc[item[key]] = item;
     return acc;
   }, {});
+}
+
+export function safeJson(obj) {
+  const json = JSON.parse(
+    JSON.stringify(obj, (_, v) => (typeof v === "bigint" ? Number(v) : v))
+  );
+
+  // Convert all string numbers to numbers
+  function convertStringNumberInsideJsonToNumber(json) {
+    for (let key in json) {
+      if (typeof json[key] === "string" && !isNaN(json[key])) {
+        json[key] = Number(json[key]);
+      } else if (typeof json[key] === "object") {
+        convertStringNumberInsideJsonToNumber(json[key]);
+      }
+    }
+  }
+  convertStringNumberInsideJsonToNumber(json);
+
+  return json;
 }

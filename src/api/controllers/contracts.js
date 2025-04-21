@@ -180,9 +180,20 @@ export const putContract = async (req, res) => {
 
   let query;
 
-  const updateValues = fitUpdateValues(body, ["id", "userid", "company_name"]);
+  const updateKeys = Object.keys(body)
+    .map((key) => `${key}=?`)
+    .join(", ");
 
-  query = `UPDATE tcn_contracts SET ${updateValues} WHERE tcn_contracts.id=?`;
+  for (let key in body) {
+    if (key === "end_date" || key === "start_date") {
+      body[key] = body[key]?.split(".")[0] || null;
+    }
+  }
+
+  const updateValues = Object.values(body);
+  updateValues.push(id);
+
+  query = `UPDATE tcn_contracts SET ${updateKeys} WHERE tcn_contracts.id=?`;
 
   try {
     db = await dbPools.pool.getConnection();
@@ -190,9 +201,9 @@ export const putContract = async (req, res) => {
     if (Array.isArray(body.devices)) {
       // Delete existing links for these devices
       const deleteQuery = `
-    DELETE FROM tcn_device_contract
-    WHERE contractid = ?;
-  `;
+        DELETE FROM tcn_device_contract
+        WHERE contractid = ?;
+      `;
       await db.query(deleteQuery, [id]);
 
       // Prepare bulk insert values
@@ -208,10 +219,10 @@ export const putContract = async (req, res) => {
       return res.status(200).send("OK");
     }
 
-    await db.query(query, [id]);
+    await db.query(query, updateValues);
+
     return res.status(200).end();
   } catch (error) {
-    console.log(error);
     return res.status(400).end("Server error");
   } finally {
     if (db) {
@@ -228,9 +239,12 @@ export const postContract = async (req, res) => {
   const flatValues = Object.values(body)
     .map((v) => {
       if (typeof v === "string") return `"${v}"`;
+      if (typeof v === "object") return `'${JSON.stringify(v)}'`;
       return v;
     })
     .join(",");
+
+  console.log(flatValues);
 
   const flatKeys = Object.keys(body).join(", ");
 
