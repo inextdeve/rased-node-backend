@@ -1,8 +1,6 @@
 import dbPools from "../db/config/index.js";
 import { TODAY } from "../helpers/constants.js";
 import { date, string, z } from "zod";
-import { dateTimeParamsSchema } from "../validations/zodSchemas.js";
-import { countRate } from "../helpers/utils.js";
 
 const NearbyStopsBodySchema = z.object({
   latitude: z.union([z.string(), z.number()]),
@@ -19,9 +17,11 @@ const devices = async (req, res) => {
 
   const { contractId, contractorId, companyId } = req.query;
 
-  let query = `SELECT tc_devices.id, tc_devices.attributes, tc_devices.groupid as groupId, tc_devices.calendarid as calendarId, tc_devices.name, tc_devices.uniqueid as uniqueId, tc_devices.status, tc_devices.lastupdate as lastUpdate, tc_devices.positionid as positionId, tc_devices.phone, tc_devices.model, tc_devices.contact, tc_devices.category, tc_devices.disabled, tc_devices.expirationtime as expirationTime FROM tc_devices`;
+  let query = `SELECT tc_devices.id, tc_devices.attributes, tc_devices.groupid as groupId, tc_devices.calendarid as calendarId, tc_devices.name, tc_devices.uniqueid as uniqueId, tc_devices.status, tc_devices.lastupdate as lastUpdate, tc_devices.positionid as positionId, tc_devices.phone, tc_devices.model, tc_devices.contact, tc_devices.category, tc_devices.disabled, tc_devices.expirationtime as expirationTime, dc.contractid, tcn_companies.id AS companyid, tcn_companies.contractorid FROM tc_devices`;
 
-  query += ` LEFT JOIN tcn_device_contract dc ON tc_devices.id = dc.deviceid`;
+  query += ` LEFT JOIN tcn_device_contract dc ON tc_devices.id = dc.deviceid
+             LEFT JOIN tcn_contracts ON dc.contractid = tcn_contracts.id
+             LEFT JOIN tcn_companies ON tcn_companies.id = tcn_contracts.companyid`;
 
   if (companyId && !contractId) {
     query += ` LEFT JOIN tcn_contracts ON dc.contractid = tcn_contracts.id`;
