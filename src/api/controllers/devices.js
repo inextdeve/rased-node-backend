@@ -15,7 +15,7 @@ const devices = async (req, res) => {
   let db;
   const params = [];
 
-  const { contractId, contractorId, companyId } = req.query;
+  const { contractId, contractorId, companyId, groupId } = req.query;
 
   let query = `SELECT tc_devices.id, tc_devices.attributes, tc_devices.groupid as groupId, tc_devices.calendarid as calendarId, tc_devices.name, tc_devices.uniqueid as uniqueId, tc_devices.status, tc_devices.lastupdate as lastUpdate, tc_devices.positionid as positionId, tc_devices.phone, tc_devices.model, tc_devices.contact, tc_devices.category, tc_devices.disabled, tc_devices.expirationtime as expirationTime, dc.contractid, tcn_companies.id AS companyid, tcn_companies.contractorid FROM tc_devices`;
 
@@ -50,6 +50,18 @@ const devices = async (req, res) => {
   if (contractorId && !companyId && !contractId) {
     query += " AND tcn_companies.contractorid = ?";
     params.push(contractorId);
+  }
+
+  if (groupId) {
+    if (Array.isArray(groupId)) {
+      query += ` AND tc_devices.groupid IN (${groupId
+        .map(() => "?")
+        .join(", ")})`;
+      params.push(...groupId);
+    } else {
+      query += " AND tc_devices.groupid = ?";
+      params.push([groupId]);
+    }
   }
 
   try {
