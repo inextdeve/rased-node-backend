@@ -4,43 +4,74 @@ import { formatHydraulicSessions } from "../helpers/utils.js";
 
 export const sweepingSessions = async (req, res) => {
   let db;
-  let { deviceId, from, to } = req.query;
+  const { deviceId, from, to } = req.query;
 
-  // Add query properties zod validation
-
-  let query = `
+  const query = `
     SELECT id, fixtime, deviceid, 
-           JSON_UNQUOTE(JSON_EXTRACT(attributes, '$.hydraulics')) AS hydraulics,
-           JSON_UNQUOTE(JSON_EXTRACT(attributes, '$.io109')) AS io109,
+           JSON_UNQUOTE(JSON_EXTRACT(attributes, '$.Brush')) AS brush_status,
+           JSON_UNQUOTE(JSON_EXTRACT(attributes, '$.distance')) AS distance,
            latitude, longitude
     FROM tc_positions
-    WHERE deviceid = ? AND fixtime >= ? AND fixtime <= ?
+    WHERE deviceid = ?
+    AND fixtime BETWEEN ? AND ?
     ORDER BY fixtime;
   `;
 
   try {
     db = await dbPools.pool.getConnection();
     const data = await db.query(query, [deviceId, from, to]);
-    if (!data.length) {
-      return res.status(404).send("No data found");
+
+    const sessions = [];
+    let coordinates = [];
+    let startTime = null;
+    let startId = null;
+    let sessionId = 1;
+    let totalDistance = 0;
+
+    for (const row of data) {
+      const brushStatus = row.brush_status?.toLowerCase() === "true";
+      const distance = parseFloat(row.distance) || 0;
+      const fixtime = moment(row.fixtime);
+
+      if (brushStatus && !startTime) {
+        startTime = fixtime;
+        startId = row.id;
+        totalDistance = distance;
+        coordinates = [[row.latitude, row.longitude]];
+      } else if (!brushStatus && startTime) {
+        const endTime = fixtime;
+        const endId = row.id;
+        const duration = moment.duration(endTime.diff(startTime)).asMinutes();
+
+        sessions.push({
+          "Session ID": sessionId,
+          "Start ID": startId,
+          "End ID": endId,
+          "Device ID": row.deviceid,
+          "Start Time": startTime.toISOString(),
+          "End Time": endTime.toISOString(),
+          "Duration (min)": duration,
+          "Total Distance (m)": totalDistance,
+          Latitude: row.latitude,
+          Longitude: row.longitude,
+          Coordinates: coordinates,
+        });
+
+        startTime = null;
+        startId = null;
+        totalDistance = 0;
+        coordinates = [];
+        sessionId += 1;
+      } else if (brushStatus) {
+        totalDistance += distance;
+        coordinates.push([row.latitude, row.longitude]);
+      }
     }
 
-    const formattedData = data
-      .map((row) => ({
-        ...row,
-        fixtime: moment(row.fixtime).toISOString(),
-      }))
-      .filter((row) => row.hydraulics);
-    console.log("Formatted Data", formattedData);
-    const hydraulicSessions = formatHydraulicSessions(formattedData);
-    console.log("Sessions");
-    res.json(hydraulicSessions);
+    res.json(sessions);
   } catch (error) {
-    res.status(400).send("Fails to fetch sweeping");
-  } finally {
-    if (db) {
-      await db.release();
-    }
+    console.error(error);
+    res.status(500).json({ error: "Server Error" });
   }
 };
 
