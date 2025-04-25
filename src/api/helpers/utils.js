@@ -168,7 +168,11 @@ export function pickKeysFromObjects(keys, arr) {
     keys = [keys];
   }
   return arr.map((obj) =>
-    Object.fromEntries(keys.map((key) => [key, obj[key]]))
+    Object.fromEntries(
+      keys
+        .filter((key) => key in obj) // only include existing keys
+        .map((key) => [key, obj[key]])
+    )
   );
 }
 
@@ -204,4 +208,49 @@ export function safeJson(obj) {
   convertStringNumberInsideJsonToNumber(json);
 
   return json;
+}
+
+export function formatHydraulicSessions(data) {
+  const hydraulicSessions = [];
+  let startTime = null;
+  let startId = null;
+  let sessionId = 1;
+  let io109Values = [];
+
+  for (const row of data) {
+    const isHydraulics = row.hydraulics;
+    const io109 = row.io109;
+    const fixtime = new Date(row.fixtime);
+
+    if (isHydraulics && startTime === null) {
+      startTime = fixtime;
+      startId = row.id;
+      io109Values = io109 ? [io109] : [];
+    } else if (!isHydraulics && startTime !== null) {
+      const endTime = fixtime;
+      const endId = row.id;
+      const duration = (endTime - startTime) / 60000; // convert ms to minutes
+
+      hydraulicSessions.push({
+        "Session ID": sessionId,
+        "Start ID": startId,
+        "End ID": endId,
+        "Device ID": row.deviceid,
+        "Start Time": startTime.toISOString(),
+        "End Time": endTime.toISOString(),
+        "Duration (min)": duration,
+        "io109 Values": io109Values.filter(Boolean).join(", "),
+        Latitude: row.latitude,
+        Longitude: row.longitude,
+      });
+
+      startTime = null;
+      startId = null;
+      sessionId += 1;
+    } else if (isHydraulics && io109) {
+      io109Values.push(io109);
+    }
+  }
+
+  return hydraulicSessions;
 }

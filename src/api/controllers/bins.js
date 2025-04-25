@@ -36,16 +36,24 @@ let CorpQuery = `
       WHERE tcn_contractors.id IN (SELECT id FROM linked_contractors) OR tcn_companies.id IN (SELECT id FROM linked_companies) OR tcn_contracts.id IN (SELECT id FROM linked_contracts)
     ),
   all_bins AS (
-  SELECT * FROM tcn_bins
-  WHERE tcn_bins.contractid IN (SELECT id FROM all_contracts)
-  )
-  
+  SELECT tcn_bins.* FROM tcn_bins 
+  LEFT JOIN tcn_contracts ON tcn_bins.contractid = tcn_contracts.id
 `;
 
 export const categorizedBins = async (req, res) => {
   let db;
 
-  let { from, to, userId, empted, washed, by } = req.query;
+  let {
+    from,
+    to,
+    userId,
+    empted,
+    washed,
+    by,
+    contractId,
+    companyId,
+    contractorId,
+  } = req.query;
 
   // const queryValidation = binsCategorizedSchama.safeParse(req.query);
 
@@ -56,17 +64,51 @@ export const categorizedBins = async (req, res) => {
   let params = [];
 
   let query = CorpQuery;
+  let filteredContractsQuery = "";
 
   if (!req.isAdministrator) {
     userId = req.userId;
-    console.log(userId);
+
     params = Array(6).fill(userId);
+    filteredContractsQuery =
+      "  WHERE tcn_bins.contractid IN (SELECT id FROM all_contracts)";
   } else if (userId) {
     params = Array(6).fill(userId);
+    filteredContractsQuery =
+      "  WHERE tcn_bins.contractid IN (SELECT id FROM all_contracts)";
   } else {
-    query = `WITH all_bins AS (SELECT * FROM tcn_bins)
+    query = `WITH all_bins AS (SELECT tcn_bins.* FROM tcn_bins 
+             LEFT JOIN tcn_contracts ON tcn_bins.contractid = tcn_contracts.id
             `;
   }
+
+  if (companyId && !contractId) {
+    query += ` LEFT JOIN tcn_companies ON tcn_contracts.companyid = tcn_companies.id`;
+  }
+
+  if (contractorId && !companyId && !contractId) {
+    query += ` LEFT JOIN tcn_companies ON tcn_contracts.companyid = tcn_companies.id
+              LEFT JOIN tcn_contractors ON tcn_companies.contractorid = tcn_contractors.id`;
+  }
+  if (req.isAdministrator && !userId) {
+    query += " WHERE 1=1";
+  }
+
+  if (contractId) {
+    query += " AND tcn_bins.contractid = ?";
+    params.push(contractId);
+  }
+
+  if (companyId && !contractId) {
+    query += " AND tcn_companies.id = ?";
+    params.push(companyId);
+  }
+
+  if (contractorId && !companyId && !contractId) {
+    query += " AND tcn_contractors.id = ?";
+    params.push(contractorId);
+  }
+  console.log(query);
 
   let washingGroup, compactorsGroup;
 
@@ -80,18 +122,18 @@ export const categorizedBins = async (req, res) => {
     washingGroup = dashboard.washing.map((w) => `'${w}'`).join(",");
   }
 
-  if (by === "types") {
-    query += `, filtered_bins AS (SELECT all_bins.tagid, tcn_binstypes.name AS ${by} FROM all_bins
+  if (by === "type") {
+    query += `), filtered_bins AS (SELECT all_bins.tagid, tcn_binstypes.name AS ${by}, tcn_binstypes.id AS ${by}id FROM all_bins
 				LEFT JOIN tcn_binstypes ON all_bins.typeid = tcn_binstypes.id)`;
   }
 
-  if (by === "routes") {
-    query += `, filtered_bins AS (SELECT all_bins.tagid, tcn_routes.route_code AS ${by} FROM all_bins
+  if (by === "route") {
+    query += `), filtered_bins AS (SELECT all_bins.tagid, tcn_routes.route_code AS ${by}, tcn_routes.id AS ${by}id FROM all_bins
     LEFT JOIN tcn_routes ON all_bins.routeid = tcn_routes.id)`;
   }
 
-  if (by === "centers") {
-    query += `, filtered_bins AS (SELECT all_bins.tagid, tcn_centers.name AS ${by} FROM all_bins
+  if (by === "center") {
+    query += `), filtered_bins AS (SELECT all_bins.tagid, tcn_centers.name AS ${by}, tcn_centers.id AS ${by}id FROM all_bins
     LEFT JOIN tcn_routes ON all_bins.routeid = tcn_routes.id
     LEFT JOIN tcn_centers ON tcn_routes.center_id = tcn_centers.id)`;
   }
@@ -112,6 +154,7 @@ export const categorizedBins = async (req, res) => {
                   GROUP BY tagid)
 
                   SELECT filtered_bins.${by},
+                  filtered_bins.${by}id,
                   SUM(CASE WHEN total_records IS NOT NULL THEN total_records ELSE 0 END) AS total_done,
                   (COUNT(filtered_bins.${by}) * ${numOfDays}) - SUM(CASE WHEN total_records IS NOT NULL THEN total_records ELSE 0 END) AS total_undone,
                   CAST(COUNT(filtered_bins.${by}) * ${numOfDays} AS CHAR) AS total
@@ -159,7 +202,7 @@ export const categorizedBins = async (req, res) => {
     }));
 
     data.push({
-      [by]: "total",
+      [by]: "Total",
       total_done: data.reduce(
         (acc, item) => acc + parseInt(item.total_done),
         0
@@ -549,7 +592,6 @@ export const bins = async (req, res) => {
     typeid,
     tagid,
     binId,
-    by,
     empted,
     from,
     to,
@@ -598,14 +640,14 @@ export const bins = async (req, res) => {
 
   if (get && !count) {
     if (Array.isArray(get)) {
-      selectedColumns = get.map((item) => binsGet[item]);
+      selectedColumns = get.map((item) => binsGet[item]).filter(Boolean);
 
       if (empted) {
-        selectedColumns.push("tg.tag_code AS rfidtag");
+        selectedColumns.push("LOWER(tg.tag_code) AS rfidtag");
       }
       selectedColumns = selectedColumns.join(", ");
     } else {
-      selectedColumns = binsGet[get];
+      selectedColumns = binsGet[get] || "";
       if (empted) {
         selectedColumns += ", tg.tag_code AS rfidtag";
       }
@@ -699,7 +741,7 @@ export const bins = async (req, res) => {
 
     const historyParams = [from, to];
     let historyQuery = `
-        SELECT h.fixtime as empted_time, h.rfidtag, h.deviceid, dv.category AS deviceCategory
+        SELECT h.fixtime as empted_time, LOWER(h.rfidtag) AS rfidtag, h.deviceid, dv.category AS deviceCategory
         FROM tcb_rfid_history h
         LEFT JOIN tc_devices dv ON h.deviceid = dv.id
         WHERE h.fixtime >= ? AND h.fixtime <= ?
@@ -731,26 +773,9 @@ export const bins = async (req, res) => {
 
     const dataWithHistory = Object.values(binObj);
 
-    // Grouping logic (if "by" is specified)
-    if (by) {
-      switch (by) {
-        case "types":
-          const groupedByType = dataWithHistory.reduce((acc, bin) => {
-            if (!acc[bin.typeid]) {
-              acc[bin.typeid] = [];
-            }
-            acc[bin.typeid].push(bin);
-            return acc;
-          }, {});
-
-          return res.status(200).json(groupedByType);
-        default:
-          return res.status(400).send(`Invalid "by" parameter: ${by}`);
-      }
-    }
-
     if (get) {
-      const filteredData = dataWithHistory; //pickKeysFromObjects(get, dataWithHistory);
+      const filteredData = pickKeysFromObjects(get, dataWithHistory); //pickKeysFromObjects(get, dataWithHistory);
+
       res.status(200).json(filteredData);
     } else {
       res.status(200).json(dataWithHistory);

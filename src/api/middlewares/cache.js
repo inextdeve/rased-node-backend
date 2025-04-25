@@ -18,7 +18,6 @@ const cache = (duration, responseMethod) => {
     const cachedResponse = memoryCache.get(key);
 
     if (cachedResponse) {
-      console.log("Cache hit", key);
       res[responseMethod](cachedResponse);
       return;
     } else {

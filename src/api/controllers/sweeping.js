@@ -1,4 +1,48 @@
+import moment from "moment";
 import dbPools from "../db/config/index.js";
+import { formatHydraulicSessions } from "../helpers/utils.js";
+
+export const sweepingSessions = async (req, res) => {
+  let db;
+  let { deviceId, from, to } = req.query;
+
+  // Add query properties zod validation
+
+  let query = `
+    SELECT id, fixtime, deviceid, 
+           JSON_UNQUOTE(JSON_EXTRACT(attributes, '$.hydraulics')) AS hydraulics,
+           JSON_UNQUOTE(JSON_EXTRACT(attributes, '$.io109')) AS io109,
+           latitude, longitude
+    FROM tc_positions
+    WHERE deviceid = ? AND fixtime >= ? AND fixtime <= ?
+    ORDER BY fixtime;
+  `;
+
+  try {
+    db = await dbPools.pool.getConnection();
+    const data = await db.query(query, [deviceId, from, to]);
+    if (!data.length) {
+      return res.status(404).send("No data found");
+    }
+
+    const formattedData = data
+      .map((row) => ({
+        ...row,
+        fixtime: moment(row.fixtime).toISOString(),
+      }))
+      .filter((row) => row.hydraulics);
+    console.log("Formatted Data", formattedData);
+    const hydraulicSessions = formatHydraulicSessions(formattedData);
+    console.log("Sessions");
+    res.json(hydraulicSessions);
+  } catch (error) {
+    res.status(400).send("Fails to fetch sweeping");
+  } finally {
+    if (db) {
+      await db.release();
+    }
+  }
+};
 
 export const sweeping = async (req, res) => {
   let db;
