@@ -117,6 +117,8 @@ export const sweepingSessionsReport = async (req, res) => {
 
   let query = "";
 
+  const max_distance_threshold = 300;
+
   if (!req.isAdministrator) {
     userId = req.userId;
     params = Array(6).fill(userId);
@@ -156,10 +158,15 @@ export const sweepingSessionsReport = async (req, res) => {
         };
       }
 
-      grouped[deviceId].totalDistance += Number(distance);
-
       // Handle brushStatus sessions
       if (entry.brush_status === "true") {
+        // Handle distance
+        if (distance > max_distance_threshold) {
+          grouped[deviceId].totalDistance += max_distance_threshold;
+        } else {
+          grouped[deviceId].totalDistance += Number(distance);
+        }
+
         if (!grouped[deviceId].currentSessionStart) {
           grouped[deviceId].currentSessionStart = new Date(entry.fixtime);
         }

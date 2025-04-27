@@ -647,9 +647,9 @@ export const bins = async (req, res) => {
       }
       selectedColumns = selectedColumns.join(", ");
     } else {
-      selectedColumns = binsGet[get] || "";
+      selectedColumns = binsGet[get] ? binsGet[get] + "," : "";
       if (empted) {
-        selectedColumns += ", tg.tag_code AS rfidtag";
+        selectedColumns += " tg.tag_code AS rfidtag";
       }
     }
   }
@@ -767,12 +767,20 @@ export const bins = async (req, res) => {
       if (!binObj[item.rfidtag]) return;
       if (binObj?.empted_time) {
         binObj[item.rfidtag].empted_time.push(item.empted_time);
+      } else {
+        binObj[item.rfidtag].empted_time = [item.empted_time];
       }
-      binObj[item.rfidtag].empted_time = [item.empted_time];
     });
 
-    const dataWithHistory = Object.values(binObj);
+    let dataWithHistory = Object.values(binObj);
 
+    // If the empted value is true mean the user want just the empted bins else empted is equal to "all"
+    if (empted === "true") {
+      dataWithHistory = dataWithHistory.filter((item) => {
+        return item?.empted_time?.length > 0;
+      });
+    }
+    console.log(dataWithHistory.length);
     if (get) {
       const filteredData = pickKeysFromObjects(get, dataWithHistory); //pickKeysFromObjects(get, dataWithHistory);
 
@@ -789,241 +797,6 @@ export const bins = async (req, res) => {
     }
   }
 };
-
-// export const bins = async (req, res) => {
-//   let db;
-//   const params = [];
-//   const {
-//     q,
-//     count,
-//     limit,
-//     cursor,
-//     contractId,
-//     contractorId,
-//     companyId,
-//     routeid,
-//     typeid,
-//     tagid,
-//     binId,
-//     by,
-//     empted,
-//     from,
-//     to,
-//     groupId,
-//     deviceId,
-//     get,
-//   } = req.query;
-
-//   let { userId } = req.query;
-
-//   if (!req.isAdministrator && userId !== req.userId) {
-//     userId = req.userId;
-//   }
-
-//   if (empted) {
-//     if (!from || !to) {
-//       return res
-//         .status(400)
-//         .send(
-//           `Both "from" and "to" parameters are required when "empted" is specified.`
-//         );
-//     }
-//   } else if (from || to) {
-//     return res
-//       .status(400)
-//       .send(
-//         `"from" and "to" parameters can only be used with the "empted" query.`
-//       );
-//   }
-//   let selectedColumns =
-//     count && !empted
-//       ? "COUNT(b.id) AS COUNT "
-//       : `b.*,
-//         c.name AS contract_name,
-//         r.route_code AS route_name,
-//         t.name AS type_name,
-//         tg.tag_code AS rfidtag,
-//         tg.name AS tagName,
-//         ctr.id AS centerid,
-//         ctr.name AS center_name`;
-
-//   if (get && !count) {
-//     if (Array.isArray(get)) {
-//       selectedColumns = get.map((item) => binsGet[item]);
-//       if (empted) {
-//         selectedColumns.push("tg.tag_code AS rfidtag");
-//       }
-//       selectedColumns = selectedColumns.join(", ");
-//     } else {
-//       selectedColumns = binsGet[get];
-//       if (empted) {
-//         selectedColumns += ", tg.tag_code AS rfidtag";
-//       }
-//     }
-//   }
-
-//   // Base query (excluding tcb_rfid_history)
-//   // i use not empted for using the count just in bins query that not require empted bins
-//   let query = `
-//     SELECT
-//       ${selectedColumns}
-//     FROM tcn_bins b
-//     LEFT JOIN tcn_contracts c ON b.contractid = c.id
-//     LEFT JOIN tcn_routes r ON b.routeid = r.id
-//     LEFT JOIN tcn_binstypes t ON b.typeid = t.id
-//     LEFT JOIN tcn_tags tg ON b.tagid = tg.id
-//     LEFT JOIN tcn_centers ctr ON r.center_id = ctr.id
-//   `;
-
-//   if (companyId && !contractId) {
-//     query += ` LEFT JOIN tcn_companies ON c.companyid = tcn_companies.id`;
-//   }
-
-//   if (contractorId && !companyId && !contractId) {
-//     query += ` LEFT JOIN tcn_companies ON c.companyid = tcn_companies.id
-//               LEFT JOIN tcn_contractors ON tcn_companies.contractorid = tcn_contractors.id`;
-//   }
-
-//   if (userId) {
-//     query += `LEFT JOIN tcn_contracts ON b.contractid = tcn_contracts.id
-//               LEFT JOIN tcn_user_contract ON tcn_contracts.id = tcn_user_contract.contractid`;
-//   }
-
-//   query += `
-//     WHERE 1=1
-//   `;
-
-//   if (contractId) {
-//     query += " AND b.contractid = ?";
-//     params.push(contractId);
-//   }
-
-//   if (companyId && !contractId) {
-//     query += " AND tcn_companies.id = ?";
-//     params.push(companyId);
-//   }
-
-//   if (contractorId && !companyId && !contractId) {
-//     query += " AND tcn_contractors.id = ?";
-//     params.push(contractorId);
-//   }
-
-//   if (routeid) {
-//     query += " AND b.routeid = ?";
-//     params.push(routeid);
-//   }
-//   if (typeid) {
-//     query += " AND b.typeid = ?";
-//     params.push(typeid);
-//   }
-//   if (tagid) {
-//     query += " AND b.tagid = ?";
-//     params.push(tagid);
-//   }
-
-//   if (userId) {
-//     query += " AND tcn_user_contract.userid = ?";
-//     params.push(userId);
-//   }
-
-//   if (binId) {
-//     query += " AND b.id = ?";
-//     params.push(binId);
-//   }
-
-//   if (q) {
-//     query += " AND b.description LIKE ?";
-//     params.push(`%${q}%`);
-//   }
-
-//   const limitValue = limit ? parseInt(limit) : 0;
-//   const cursorValue = cursor ? parseInt(cursor) : 0;
-
-//   if (limitValue) {
-//     query += " LIMIT ? OFFSET ? ";
-//     params.push(limitValue, cursorValue);
-//   }
-//   try {
-//     // Execute the main query
-//     db = await dbPools.pool.getConnection();
-//     const binsData = await db.query(query, params);
-
-//     if (!empted) {
-//       if (count) return res.json(parseInt(binsData[0]["COUNT"]));
-//       return res.json(binsData);
-//     }
-//     // Extract tag codes for querying tcb_rfid_history
-//     const tagCodes = binsData.map((bin) => bin.rfidtag).filter((tag) => tag); // Ensure tag_code exists
-//     let historyData = [];
-
-//     if (tagCodes.length > 0) {
-//       const historyParams = [from, to, ...tagCodes];
-//       let historyQuery = `
-//         SELECT h.fixtime as empted_time, h.rfidtag, h.deviceid, dv.category AS deviceCategory
-//         FROM tcb_rfid_history h
-//         LEFT JOIN tc_devices dv ON h.deviceid = dv.id
-//         WHERE h.fixtime >= ? AND h.fixtime <= ?
-//         AND h.rfidtag IN (${tagCodes.map(() => "?").join(", ")})
-//       `;
-
-//       if (deviceId) {
-//         if (Array.isArray(deviceId)) {
-//           historyQuery += ` AND h.deviceid IN (${deviceId
-//             .map(() => "?")
-//             .join(", ")}) `;
-//           historyParams.push(...deviceId);
-//         } else {
-//           historyQuery += " AND h.deviceid = ? ";
-//           historyParams.push(deviceId);
-//         }
-//       }
-
-//       historyData = await db.query(historyQuery, historyParams);
-//     }
-
-//     const dataWithHistory = historyData
-//       .map((binHistory) => {
-//         const bin = binsData.find(
-//           (bin) =>
-//             bin.rfidtag?.toLowerCase() === binHistory.rfidtag?.toLowerCase()
-//         );
-//         if (!bin) return null;
-//         return {
-//           ...bin,
-//           empted_time: binHistory.empted_time,
-//           ...binHistory,
-//         };
-//       })
-//       .filter(Boolean);
-
-//     // Grouping logic (if "by" is specified)
-//     if (by) {
-//       switch (by) {
-//         case "types":
-//           const groupedByType = dataWithHistory.reduce((acc, bin) => {
-//             if (!acc[bin.typeid]) {
-//               acc[bin.typeid] = [];
-//             }
-//             acc[bin.typeid].push(bin);
-//             return acc;
-//           }, {});
-
-//           return res.status(200).json(groupedByType);
-//         default:
-//           return res.status(400).send(`Invalid "by" parameter: ${by}`);
-//       }
-//     }
-
-//     res.status(200).json(dataWithHistory);
-//   } catch (error) {
-//     console.error("Database query failed:", error);
-//     res.status(500).send("An error occurred while fetching bins");
-//   } finally {
-//     if (db) {
-//       await db.release();
-//     }
-//   }
-// };
 
 const binById = async (req, res) => {
   let db;

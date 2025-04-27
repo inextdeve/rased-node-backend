@@ -137,7 +137,217 @@ const kpi = async (req, res) => {
     }
   }
 };
+export const summaryByGeofence = async (req, res) => {
+  let db;
+  const query = req.query;
 
+  let { from, to, contractorId, companyId, contractId, deviceCategory } =
+    req.query;
+
+  const userId = req.user.id;
+
+  const queryValidation = summaryQuerySchema.safeParse(query);
+
+  if (!queryValidation.success) {
+    return res.status(400).send(formatZodError(queryValidation.error));
+  }
+
+  let washingGroup, compactorsGroup;
+
+  const numOfDays = getDaysBetweenDates(from, to);
+  const { dashboard } = JSON.parse(req.user.attributes);
+
+  if (dashboard?.compactors?.length) {
+    compactorsGroup = dashboard.compactors.map((c) => `'${c}'`).join(",");
+  }
+
+  if (dashboard?.washing?.length) {
+    washingGroup = dashboard.washing.map((w) => `'${w}'`).join(",");
+  }
+
+  const isEmptyQuery = hasOnlyProps(query, ["from", "to"]);
+
+  const admin = req.isAdministrator;
+
+  if (isEmptyQuery && !admin) {
+    const query = await getCorpConnections(req.user.id);
+    contractId = query.contractId ? query.contractId.join(", ") : undefined;
+    companyId = query.companyId ? query.companyId.join(", ") : undefined;
+    contractorId = query.contractorId
+      ? query.contractorId.join(", ")
+      : undefined;
+  }
+
+  let dbQuery = `
+    WITH 
+    filtered_contracts AS (
+        SELECT contracts.id AS contract_id, contracts.name AS contract_name, contracts.companyid
+        FROM tcn_contracts contracts
+        JOIN tcn_user_contract uc ON contracts.id = uc.contractid
+        WHERE ${
+          !admin
+            ? `(uc.userid = ${userId} OR contracts.userid = ${userId})`
+            : "1=1"
+        } 
+        AND (${contractId ? `contracts.id IN (${contractId})` : "1=1 "})
+        AND (${companyId ? `contracts.companyid IN (${companyId})` : "1=1"})
+        GROUP BY contracts.id
+    ), 
+    filtered_companies AS (
+        SELECT companies.id AS company_id, companies.name AS company_name, companies.contractorid
+        FROM tcn_companies companies
+        JOIN tcn_user_company uc ON companies.id = uc.companyid
+        WHERE ${
+          !admin
+            ? `(uc.userid = ${userId} OR companies.userid = ${userId})`
+            : "1=1"
+        } 
+        AND (${companyId ? `companies.id IN (${companyId})` : "1=1"})
+        GROUP BY companies.id
+    ), 
+    filtered_contractors AS (
+        SELECT contractors.id AS contractor_id, contractors.name AS contractor_name
+        FROM tcn_contractors contractors
+        JOIN tcn_user_contractor uc ON contractors.id = uc.contractorid
+        WHERE ${
+          !admin
+            ? `(uc.userid = ${userId} OR contractors.userid = ${userId})`
+            : "1=1"
+        } 
+        AND (${contractorId ? `contractors.id IN (${contractorId})` : "1=1"})
+        GROUP BY contractors.id
+    ), 
+    filtered_bins AS (
+        SELECT bins.id AS bin_id, bins.contractid, bins.typeid
+        FROM tcn_bins bins
+        WHERE bins.contractid IN (SELECT contract_id FROM filtered_contracts)
+    ), 
+    history_counts AS (
+        SELECT history.positionid AS id, history.geoid, DATE(history.serv_time) AS record_date, COUNT(DISTINCT DATE(history.serv_time)) AS total_records
+        FROM tcn_poi_schedule history
+        JOIN tc_devices devices ON history.bydevice = devices.id
+        WHERE history.serv_time BETWEEN '${from}' AND '${to}'
+        GROUP BY history.geoid, DATE(history.serv_time)
+    ),
+    ${
+      washingGroup
+        ? `history_counts_washing AS (
+         SELECT history.positionid AS id, history.geoid, DATE(history.serv_time) AS record_date, COUNT(DISTINCT DATE(history.serv_time)) AS total_records_washing
+        FROM tcn_poi_schedule history
+        JOIN tc_devices devices ON history.bydevice = devices.id
+        WHERE history.serv_time BETWEEN '${from}' AND '${to}'
+        AND devices.category IN (${washingGroup})
+        GROUP BY history.geoid, DATE(history.serv_time)
+    ),`
+        : ""
+    }
+    ${
+      compactorsGroup
+        ? `history_counts_compactors AS (
+        SELECT history.positionid AS id, history.geoid, DATE(history.serv_time) AS record_date, COUNT(DISTINCT DATE(history.serv_time)) AS total_records_unloading
+        FROM tcn_poi_schedule history
+        JOIN tc_devices devices ON history.bydevice = devices.id
+        WHERE history.serv_time BETWEEN '${from}' AND '${to}'
+        AND devices.category IN (${compactorsGroup})
+        GROUP BY history.geoid, DATE(history.serv_time)
+    ),`
+        : ""
+    }
+    summary_data AS (
+        SELECT
+            fc.contract_id,
+            fc.contract_name,
+            fco.company_id,
+            fco.company_name,
+            fct.contractor_id,
+            fct.contractor_name,
+            bt.name AS bin_type,
+            fb.typeid AS bin_type_id,
+            fb.bin_id,
+            COUNT(DISTINCT fb.bin_id) * ${numOfDays} AS total_bins_count,
+            SUM(COALESCE(hc.total_records, 0)) AS unique_bins_count,
+            SUM(COALESCE(hc.total_records, 0)) AS total_records_count
+            ${
+              washingGroup
+                ? `, SUM(COALESCE(hcw.total_records_washing, 0)) AS total_records_washing `
+                : ""
+            }
+            ${
+              compactorsGroup
+                ? `, SUM(COALESCE(hcc.total_records_unloading, 0)) AS total_records_unloading `
+                : ""
+            }
+        FROM filtered_bins fb
+        JOIN tcn_binstypes bt ON fb.typeid = bt.id
+        LEFT JOIN history_counts hc ON fb.bin_id = hc.geoid
+        ${
+          washingGroup
+            ? "LEFT JOIN history_counts_washing hcw ON hc.id = hcw.id"
+            : ""
+        }
+        ${
+          compactorsGroup
+            ? "LEFT JOIN history_counts_compactors hcc ON hc.id = hcc.id"
+            : ""
+        }
+        LEFT JOIN filtered_contracts fc ON fb.contractid = fc.contract_id
+        LEFT JOIN filtered_companies fco ON fc.companyid = fco.company_id
+        LEFT JOIN filtered_contractors fct ON fco.contractorid = fct.contractor_id
+        GROUP BY fc.contract_name, fco.company_name, fct.contractor_name, bt.name
+    )
+    SELECT 
+        bin_type_id,
+        contract_id,
+        contract_name,
+        company_id,
+        company_name,
+        contractor_id,
+        contractor_name,
+        bin_type,
+        total_bins_count,
+        unique_bins_count,
+        total_records_count,
+        ${washingGroup ? "total_records_washing," : ""}
+        ${compactorsGroup ? "total_records_unloading," : ""}
+        IFNULL((unique_bins_count / NULLIF(total_bins_count, 0)) * 100, 0) AS uniqueness_percentage
+    FROM summary_data
+    
+
+    UNION ALL
+
+    SELECT 
+        'total' AS contract_name,
+        '---' AS company_name,
+        '---' AS contractor_name,
+        '---' AS bin_type,
+        '---' AS contract_id,
+        '---' AS company_id,
+        '---' AS contractor_id,
+        '---' AS bin_type_id,
+        SUM(total_bins_count),
+        SUM(unique_bins_count),
+        SUM(total_records_count),
+        ${washingGroup ? "SUM(total_records_washing)," : ""}
+        ${compactorsGroup ? "SUM(total_records_unloading)," : ""}
+        IFNULL((SUM(unique_bins_count) / NULLIF(SUM(total_bins_count), 0)) * 100, 0) AS uniqueness_percentage
+    FROM summary_data
+    ORDER BY contract_name, total_records_count DESC;
+  `;
+
+  try {
+    db = await dbPools.pool.getConnection();
+    const data = await db.query(dbQuery, [from, to]);
+
+    res.json(data);
+  } catch (error) {
+    console.error("Error executing query:", error);
+    res.status(500).send("Internal server error");
+  } finally {
+    if (db) {
+      await db.release();
+    }
+  }
+};
 export const summary = async (req, res) => {
   let db;
   const query = req.query;
@@ -169,7 +379,7 @@ export const summary = async (req, res) => {
   const isEmptyQuery = hasOnlyProps(query, ["from", "to"]);
 
   const admin = req.isAdministrator;
-  console.log("is Admin", admin);
+
   if (isEmptyQuery && !admin) {
     const query = await getCorpConnections(req.user.id);
     contractId = query.contractId ? query.contractId.join(", ") : undefined;
@@ -744,7 +954,6 @@ ORDER BY fc.project_name, total_brush_distance DESC;
   params.push(max_distance_threshold, from, to);
 
   try {
-    console.log(query);
     db = await dbPools.pool.getConnection();
     const data = await db.query(query, params);
 
