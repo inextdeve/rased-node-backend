@@ -744,6 +744,7 @@ ORDER BY fc.project_name, total_brush_distance DESC;
   params.push(max_distance_threshold, from, to);
 
   try {
+    console.log(query);
     db = await dbPools.pool.getConnection();
     const data = await db.query(query, params);
 

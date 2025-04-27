@@ -2,6 +2,41 @@ import moment from "moment";
 import dbPools from "../db/config/index.js";
 import { formatHydraulicSessions } from "../helpers/utils.js";
 
+let CorpQuery = `
+   WITH
+    linked_contracts AS (
+      SELECT tcn_contracts.* FROM tcn_contracts
+      LEFT JOIN tcn_user_contract user_contract ON tcn_contracts.id = user_contract.contractid
+      WHERE user_contract.userid = ? OR tcn_contracts.userid = ?
+      GROUP BY tcn_contracts.id
+    ),
+    linked_companies AS (
+      SELECT tcn_companies.id FROM tcn_companies
+      LEFT JOIN tcn_user_company user_company ON tcn_companies.id = user_company.companyid
+      WHERE user_company.userid = ? OR tcn_companies.userid = ?
+      GROUP BY tcn_companies.id
+    ),  
+    linked_contractors AS (
+      SELECT tcn_contractors.id FROM tcn_contractors
+      LEFT JOIN tcn_user_contractor user_contractor ON tcn_contractors.id = user_contractor.contractorid
+      WHERE user_contractor.userid = ? OR tcn_contractors.userid = ?
+      GROUP BY tcn_contractors.id
+    ),
+    all_contracts AS (
+      SELECT tcn_contracts.id AS contract_id, tcn_contracts.name AS project_name, tcn_contracts.companyid FROM tcn_contracts
+      LEFT JOIN tcn_companies ON tcn_companies.id = tcn_contracts.companyid
+      LEFT JOIN tcn_contractors ON tcn_contractors.id = tcn_companies.contractorid
+      WHERE tcn_contractors.id IN (SELECT id FROM linked_contractors) OR tcn_companies.id IN (SELECT id FROM linked_companies) OR tcn_contracts.id IN (SELECT id FROM linked_contracts)
+    ),
+  filtered_devices AS (
+  SELECT dc.deviceid, dc.contractid, c.companyid, co.contractorid
+    FROM tcn_device_contract dc
+    JOIN tc_devices d ON dc.deviceid = d.id
+    JOIN tcn_contracts c ON dc.contractid = c.id
+    JOIN tcn_companies co ON c.companyid = co.id
+    WHERE dc.contractid IN (SELECT id FROM all_contracts) AND d.category = 'sweeper' 
+`;
+
 export const sweepingSessions = async (req, res) => {
   let db;
   const { deviceId, from, to } = req.query;
@@ -44,17 +79,17 @@ export const sweepingSessions = async (req, res) => {
         const duration = moment.duration(endTime.diff(startTime)).asMinutes();
 
         sessions.push({
-          "Session ID": sessionId,
-          "Start ID": startId,
-          "End ID": endId,
-          "Device ID": row.deviceid,
-          "Start Time": startTime.toISOString(),
-          "End Time": endTime.toISOString(),
-          "Duration (min)": duration,
-          "Total Distance (m)": totalDistance,
-          Latitude: row.latitude,
-          Longitude: row.longitude,
-          Coordinates: coordinates,
+          sessionId: sessionId,
+          startId: startId,
+          endId: endId,
+          deviceId: row.deviceid,
+          startTime: startTime.toISOString(),
+          endTime: endTime.toISOString(),
+          duration: duration, // in minutes
+          totalDistance: totalDistance.toFixed(2), // in meters
+          latitude: row.latitude,
+          longitude: row.longitude,
+          coordinates: coordinates,
         });
 
         startTime = null;
@@ -72,6 +107,99 @@ export const sweepingSessions = async (req, res) => {
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: "Server Error" });
+  }
+};
+
+export const sweepingSessionsReport = async (req, res) => {
+  let db;
+  const { deviceId, from, to, userId } = req.query;
+  let params = [];
+
+  let query = "";
+
+  if (!req.isAdministrator) {
+    userId = req.userId;
+    params = Array(6).fill(userId);
+  } else if (userId) {
+    params = Array(6).fill(userId);
+  } else {
+    query = `WITH all_devices AS (SELECT tc_devices.id, tc_devices.name FROM tc_devices 
+             WHERE tc_devices.category = 'sweeper')
+            `;
+  }
+
+  query += `
+    SELECT  fixtime, deviceid  AS deviceId, 
+           JSON_UNQUOTE(JSON_EXTRACT(attributes, '$.Brush')) AS brush_status,
+           JSON_UNQUOTE(JSON_EXTRACT(attributes, '$.distance')) AS distance
+    FROM tc_positions
+    JOIN all_devices fd ON tc_positions.deviceid = fd.id
+    WHERE fixtime BETWEEN ? AND ?
+    ORDER BY fixtime;
+  `;
+
+  try {
+    db = await dbPools.pool.getConnection();
+    const data = await db.query(query, [from, to]);
+
+    const grouped = {};
+
+    data.forEach((entry) => {
+      const { deviceId, distance } = entry;
+
+      if (!grouped[deviceId]) {
+        grouped[deviceId] = {
+          deviceId,
+          totalDistance: 0,
+          workSessions: [],
+          currentSessionStart: null,
+        };
+      }
+
+      grouped[deviceId].totalDistance += Number(distance);
+
+      // Handle brushStatus sessions
+      if (entry.brush_status === "true") {
+        if (!grouped[deviceId].currentSessionStart) {
+          grouped[deviceId].currentSessionStart = new Date(entry.fixtime);
+        }
+      } else {
+        if (grouped[deviceId].currentSessionStart) {
+          const sessionEnd = new Date(entry.fixtime);
+          const sessionDuration =
+            (sessionEnd - grouped[deviceId].currentSessionStart) / 60000; // ms to minutes
+          grouped[deviceId].workSessions.push(sessionDuration);
+          grouped[deviceId].currentSessionStart = null;
+        }
+      }
+    });
+
+    // Final result
+    const result = Object.values(grouped).map((device) => ({
+      deviceId: device.deviceId,
+      totalDistance: device.totalDistance.toFixed(2),
+      workTime: Math.round(
+        device.workSessions.reduce((sum, time) => sum + time, 0)
+      ),
+    }));
+    result.push({
+      deviceId: "Total",
+      totalDistance: result.reduce(
+        (sum, device) => sum + Number(device.totalDistance),
+        0
+      ),
+      workTime: Math.round(
+        result.reduce((sum, device) => sum + device.workTime, 0)
+      ),
+    });
+    res.json(result);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Server Error" });
+  } finally {
+    if (db) {
+      await db.release();
+    }
   }
 };
 
