@@ -335,6 +335,7 @@ export const summaryByGeofence = async (req, res) => {
   `;
 
   try {
+    return res.send(dbQuery);
     db = await dbPools.pool.getConnection();
     const data = await db.query(dbQuery, [from, to]);
 
