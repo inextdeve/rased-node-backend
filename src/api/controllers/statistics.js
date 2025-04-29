@@ -157,13 +157,13 @@ export const summaryByGeofence = async (req, res) => {
   const numOfDays = getDaysBetweenDates(from, to);
   const { dashboard } = JSON.parse(req.user.attributes);
 
-  if (dashboard?.compactors?.length) {
-    compactorsGroup = dashboard.compactors.map((c) => `'${c}'`).join(",");
-  }
+  // if (dashboard?.compactors?.length) {
+  //   compactorsGroup = dashboard.compactors.map((c) => `'${c}'`).join(",");
+  // }
 
-  if (dashboard?.washing?.length) {
-    washingGroup = dashboard.washing.map((w) => `'${w}'`).join(",");
-  }
+  // if (dashboard?.washing?.length) {
+  //   washingGroup = dashboard.washing.map((w) => `'${w}'`).join(",");
+  // }
 
   const isEmptyQuery = hasOnlyProps(query, ["from", "to"]);
 
@@ -278,16 +278,16 @@ export const summaryByGeofence = async (req, res) => {
                 : ""
             }
         FROM filtered_bins fb
-        JOIN tcn_binstypes bt ON fb.typeid = bt.id
+        LEFT JOIN tcn_binstypes bt ON fb.typeid = bt.id
         LEFT JOIN history_counts hc ON fb.bin_id = hc.geoid
         ${
           washingGroup
-            ? "LEFT JOIN history_counts_washing hcw ON hc.id = hcw.id"
+            ? "LEFT JOIN history_counts_washing hcw ON fb.bin_id = hcw.geoid"
             : ""
         }
         ${
           compactorsGroup
-            ? "LEFT JOIN history_counts_compactors hcc ON hc.id = hcc.id"
+            ? "LEFT JOIN history_counts_compactors hcc ON fb.bin_id = hcc.geoid"
             : ""
         }
         LEFT JOIN filtered_contracts fc ON fb.contractid = fc.contract_id
@@ -335,7 +335,6 @@ export const summaryByGeofence = async (req, res) => {
   `;
 
   try {
-    return res.send(dbQuery);
     db = await dbPools.pool.getConnection();
     const data = await db.query(dbQuery, [from, to]);
 
@@ -545,7 +544,6 @@ export const summary = async (req, res) => {
     FROM summary_data
     ORDER BY contract_name, total_records_count DESC;
   `;
-  console.log(dbQuery);
   try {
     db = await dbPools.pool.getConnection();
     const data = await db.query(dbQuery, [from, to]);
