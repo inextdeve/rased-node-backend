@@ -657,7 +657,7 @@ export const bins = async (req, res) => {
   // Base query (excluding tcb_rfid_history)
   // i use not empted for using the count just in bins query that not require empted bins
   query += `
-    SELECT
+    ) SELECT
       ${selectedColumns}
     FROM all_bins b
     LEFT JOIN tcn_contracts c ON b.contractid = c.id
@@ -727,6 +727,7 @@ export const bins = async (req, res) => {
   }
 
   try {
+    // console.log("QUERY START", query, "QUERY END");
     // Execute the main query
     db = await dbPools.pool.getConnection();
     const binsData = await db.query(query, params);
