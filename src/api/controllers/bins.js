@@ -37,7 +37,7 @@ let CorpQuery = `
     ),
   all_bins AS (
   SELECT tcn_bins.* FROM tcn_bins 
-  LEFT JOIN tcn_contracts ON tcn_bins.contractid = tcn_contracts.id
+  RIGHT JOIN all_contracts ON tcn_bins.contractid = all_contracts.id
 `;
 
 export const categorizedBins = async (req, res) => {
@@ -108,7 +108,6 @@ export const categorizedBins = async (req, res) => {
     query += " AND tcn_contractors.id = ?";
     params.push(contractorId);
   }
-  console.log(query);
 
   let washingGroup, compactorsGroup;
 
@@ -727,7 +726,6 @@ export const bins = async (req, res) => {
   }
 
   try {
-    // console.log("QUERY START", query, "QUERY END");
     // Execute the main query
     db = await dbPools.pool.getConnection();
     const binsData = await db.query(query, params);
@@ -781,7 +779,6 @@ export const bins = async (req, res) => {
         return item?.empted_time?.length > 0;
       });
     }
-    console.log(dataWithHistory.length);
     if (get) {
       const filteredData = pickKeysFromObjects(get, dataWithHistory); //pickKeysFromObjects(get, dataWithHistory);
 
@@ -884,7 +881,6 @@ const binReports = async (req, res) => {
 
 const binCategorized = async (req, res) => {
   let db;
-  console.log("category");
 
   const query = req.query;
   const category = req.params.category;
@@ -1200,7 +1196,6 @@ const updateBinStatus = async (req, res) => {
 
     res.sendStatus(202);
   } catch (error) {
-    // console.log(error);
     if (error?.code === "ER_DUP_ENTRY") {
       return res
         .status(409)
