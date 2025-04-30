@@ -16,6 +16,7 @@ import contractorsRouter from "./contractors.js";
 import sweepingRouter from "./sweeping.js";
 import permissionsRouter from "./permissions.js";
 import eventsRouter from "./events.js";
+import groupsRouter from "./groups.js";
 
 import auth from "../middlewares/auth.js";
 
@@ -39,5 +40,6 @@ router.use("/connections", connectionsRouter);
 router.use("/contractors", contractorsRouter);
 router.use("/permissions", permissionsRouter);
 router.use("/events", eventsRouter);
+router.use("/groups", groupsRouter);
 
 export default router;

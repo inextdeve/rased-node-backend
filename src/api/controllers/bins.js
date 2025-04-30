@@ -55,12 +55,6 @@ export const categorizedBins = async (req, res) => {
     contractorId,
   } = req.query;
 
-  // const queryValidation = binsCategorizedSchama.safeParse(req.query);
-
-  // if (!queryValidation.success) {
-  //   return res.status(400).send(formatZodError(queryValidation.error));
-  // }
-
   let params = [];
 
   let query = CorpQuery;
@@ -1003,63 +997,6 @@ const binCategorized = async (req, res) => {
     }
   }
 };
-
-// const summary = async (req, res) => {
-//   let db;
-
-//   const query = req.query;
-//   //Query for last 7 days bins status
-//   const dbQuery = `SELECT tcn_poi_schedule.geoid, tcn_poi_schedule.serv_time FROM tcn_poi_schedule
-//                     WHERE tcn_poi_schedule.serv_time BETWEEN "${
-//                       query.from
-//                     }" AND ${
-//     query.to ? `"${query.to}"` : false || "(select current_timestamp)"
-//   }`;
-//   //Query for all bins
-//   const queryAllBins = `SELECT COUNT(tc_geofences.id) AS counter FROM tc_geofences
-//                         WHERE tc_geofences.attributes LIKE '%"bins": "yes"%' AND JSON_EXTRACT(tc_geofences.attributes, "$.cartoon") IS NULL`;
-
-//   try {
-//     db = await dbPools.pool.getConnection();
-//     const [allBins, data] = await Promise.all([
-//       db.query(queryAllBins),
-//       db.query(dbQuery),
-//     ]);
-
-//     const groupedByDate = new Object();
-
-//     data.forEach((item) => {
-//       const date = item.serv_time.toISOString().split("T")[0];
-//       if (groupedByDate[date]) {
-//         groupedByDate[date] += 1;
-//         return;
-//       }
-//       groupedByDate[date] = 1;
-//     });
-
-//     const response = new Array();
-
-//     for (let key in groupedByDate) {
-//       //Skip the first day because is not full
-//       // if (key === query.from.split("T")[0]) {
-//       //   continue;
-//       // }
-//       response.push({
-//         date: key,
-//         total: parseInt(allBins[0].counter),
-//         empty_bin: groupedByDate[key],
-//         un_empty_bin: parseInt(allBins[0].counter) - groupedByDate[key],
-//       });
-//     }
-//     res.json(response);
-//   } catch (error) {
-//     res.status(500).end();
-//   } finally {
-//     if (db) {
-//       await db.release();
-//     }
-//   }
-// };
 
 // Patch Controllers
 const updateBin = () => {};
