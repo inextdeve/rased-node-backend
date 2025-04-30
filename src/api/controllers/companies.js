@@ -51,14 +51,15 @@ export const ManagmentCompanies = async (req, res) => {
     params = [...new Array(6).fill(userId)];
   }
 
+  let query = CorpQuery;
+
   if (req.isAdministrator) {
-    CorpQuery = `WITH
+    query = `WITH
                   all_companies AS (SELECT tcn_companies.* FROM tcn_companies)
                 SELECT all_companies.*, true AS linked FROM all_companies
                 `;
   }
 
-  let query = CorpQuery;
   let conditions = [];
 
   if (contractorId) {
