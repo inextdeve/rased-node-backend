@@ -512,6 +512,11 @@ export const bins = async (req, res) => {
         WHERE h.fixtime >= ? AND h.fixtime <= ?
       `;
 
+    if (binId) {
+      historyQuery += " AND h.rfidtag = ? ";
+      historyParams.push(binsData[0].rfidtag.toLowerCase());
+    }
+
     if (deviceId) {
       if (Array.isArray(deviceId)) {
         historyQuery += ` AND h.deviceid IN (${deviceId
