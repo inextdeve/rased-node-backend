@@ -364,6 +364,7 @@ export const bins = async (req, res) => {
     deviceId,
     get,
     userId,
+    emptiedType,
   } = req.query;
 
   const queryValidation = binsSchema.safeParse(req.query);
@@ -533,13 +534,11 @@ export const bins = async (req, res) => {
 
     const binObj = arrayToObjectByKey("rfidtag", binsData);
 
-    historyData.forEach((item) => {
-      if (!binObj[item.rfidtag]) return;
-      if (binObj?.empted_time) {
-        binObj[item.rfidtag].empted_time.push(item.empted_time);
-      } else {
-        binObj[item.rfidtag].empted_time = [item.empted_time];
-      }
+    historyData.forEach(({ rfidtag, empted_time }) => {
+      if (!binObj[rfidtag]) return;
+      const bin = binObj[rfidtag];
+      bin.empted_time = bin.empted_time || [];
+      bin.empted_time.push(empted_time);
     });
 
     let dataWithHistory = Object.values(binObj);
@@ -550,6 +549,19 @@ export const bins = async (req, res) => {
         return item?.empted_time?.length > 0;
       });
     }
+
+    if (emptiedType === "count") {
+      dataWithHistory = dataWithHistory.map((binData) => {
+        if (!binData.empted_time) return binData;
+
+        const emptiedCount = binData.empted_time.length;
+
+        const { empted_time, ...rest } = binData;
+
+        return { ...rest, emptiedCount };
+      });
+    }
+
     if (get) {
       const filteredData = pickKeysFromObjects(get, dataWithHistory); //pickKeysFromObjects(get, dataWithHistory);
 
