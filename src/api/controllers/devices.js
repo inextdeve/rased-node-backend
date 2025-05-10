@@ -65,7 +65,6 @@ const devices = async (req, res) => {
   }
 
   try {
-    console.log("QUERY", query);
     db = await dbPools.pool.getConnection();
     const data = await db.query(query, params);
     res.json(
@@ -130,7 +129,6 @@ export const reportDevices = async (req, res) => {
   // Add groupId filter if provided (allow for multiple groupId values)
   if (groupId) {
     const groupIds = Array.isArray(groupId) ? groupId : [groupId]; // If groupId is an array, use it, otherwise make it an array
-    console.log("Groups", groupIds);
     const groupConditions = groupIds
       .map(
         (id) =>

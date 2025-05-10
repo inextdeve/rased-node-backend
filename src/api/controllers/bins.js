@@ -399,7 +399,7 @@ export const bins = async (req, res) => {
         c.name AS contract_name,
         r.route_code AS route_name,
         t.name AS type_name,
-        tg.tag_code AS rfidtag,
+        LOWER(tg.tag_code) AS rfidtag,
         tg.name AS tagName,
         ctr.id AS centerid,
         ctr.name AS center_name`;
@@ -511,6 +511,7 @@ export const bins = async (req, res) => {
         FROM tcb_rfid_history h
         LEFT JOIN tc_devices dv ON h.deviceid = dv.id
         WHERE h.fixtime >= ? AND h.fixtime <= ?
+        GROUP BY DATE(empted_time), h.rfidtag
       `;
 
     if (binId) {
@@ -556,9 +557,7 @@ export const bins = async (req, res) => {
 
         const emptiedCount = binData.empted_time.length;
 
-        const { empted_time, ...rest } = binData;
-
-        return { ...rest, emptiedCount };
+        return { ...binData, empted_time: emptiedCount };
       });
     }
 

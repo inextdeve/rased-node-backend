@@ -129,8 +129,6 @@ export const getTag = async (req, res) => {
   const id = parseInt(req.params.id);
   const reqQuery = req.query;
 
-  console.log(req.userId);
-
   let query = "SELECT * FROM tcn_tags WHERE id=? AND userid=?";
 
   try {
@@ -195,10 +193,8 @@ export const putTag = async (req, res) => {
 
   const body = req.body;
   const id = req.params?.id;
-  console.log(body);
-  const updateValues = fitUpdateValues(body, ["id", "userid"]);
 
-  console.log(updateValues);
+  const updateValues = fitUpdateValues(body, ["id", "userid"]);
 
   const query = `UPDATE tcn_tags SET ${updateValues} WHERE tcn_tags.id=?`;
 
